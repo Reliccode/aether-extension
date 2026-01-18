@@ -122,6 +122,7 @@ export const SuggestionList: React.FC<Props> = ({ results, onSelect, onClose }) 
                     return (
                         <div
                             key={item.id}
+                            onMouseDown={(e) => e.preventDefault()} // Prevent focus steal
                             onClick={() => handleSelect(item)}
                             onMouseEnter={() => setSelectedIndex(index)}
                             className={clsx(

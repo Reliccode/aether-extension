@@ -99,6 +99,9 @@ document.addEventListener('compositionend', handleInput, true);
 
 function handleSelect(content: string, _id: string) {
     if (currentAdapter) {
+        // Ensure focus is on the input before manipulation
+        currentAdapter.focus();
+
         const context = currentAdapter.getContext(30);
         const match = context.match(/\/\w*$/);
         if (match) {

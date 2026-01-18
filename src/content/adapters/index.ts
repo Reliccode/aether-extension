@@ -5,19 +5,45 @@ export interface InputAdapter {
     getCoordinates(): { x: number; y: number; height: number } | null;
     deleteTrigger(length: number): void;
     insert(text: string): void;
+    focus(): void;
+}
+
+// Store selection state for restoration
+let savedRange: Range | null = null;
+
+export function saveSelection() {
+    const sel = window.getSelection();
+    if (sel?.rangeCount) {
+        savedRange = sel.getRangeAt(0).cloneRange();
+    }
+}
+
+export function restoreSelection() {
+    if (savedRange) {
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(savedRange);
+    }
 }
 
 // 1. Native Input Adapter (<input>, <textarea>)
 class NativeAdapter implements InputAdapter {
     private el: HTMLInputElement | HTMLTextAreaElement;
+    private savedStart: number = 0;
 
     constructor(el: HTMLInputElement | HTMLTextAreaElement) {
         this.el = el;
+        this.savedStart = el.selectionStart || 0;
+    }
+
+    focus() {
+        this.el.focus();
     }
 
     getContext(chars: number) {
         const value = this.el.value || '';
         const start = this.el.selectionStart ?? value.length;
+        this.savedStart = start;
         const extractStart = Math.max(0, start - chars);
         return value.slice(extractStart, start);
     }
@@ -32,13 +58,15 @@ class NativeAdapter implements InputAdapter {
     }
 
     deleteTrigger(length: number) {
-        const start = this.el.selectionStart || 0;
+        this.el.focus();
+        const start = this.el.selectionStart || this.savedStart;
         const deleteStart = Math.max(0, start - length);
         this.el.setRangeText('', deleteStart, start, 'end');
         this.el.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
     insert(text: string) {
+        this.el.focus();
         const start = this.el.selectionStart || 0;
         const end = this.el.selectionEnd || 0;
         this.el.setRangeText(text, start, end, 'end');
@@ -49,9 +77,27 @@ class NativeAdapter implements InputAdapter {
 // 2. ContentEditable Adapter (Gmail, WhatsApp, etc.)
 class ContentEditableAdapter implements InputAdapter {
     protected el: HTMLElement;
+    protected savedRange: Range | null = null;
 
     constructor(el: HTMLElement) {
         this.el = el;
+        this.saveCurrentRange();
+    }
+
+    protected saveCurrentRange() {
+        const sel = window.getSelection();
+        if (sel?.rangeCount) {
+            this.savedRange = sel.getRangeAt(0).cloneRange();
+        }
+    }
+
+    focus() {
+        this.el.focus();
+        if (this.savedRange) {
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(this.savedRange);
+        }
     }
 
     getContext(chars: number) {
@@ -59,6 +105,7 @@ class ContentEditableAdapter implements InputAdapter {
         if (!sel?.rangeCount) return '';
 
         const range = sel.getRangeAt(0);
+        this.savedRange = range.cloneRange();
 
         if (range.startContainer.nodeType === Node.TEXT_NODE) {
             const text = range.startContainer.textContent || '';
@@ -91,6 +138,16 @@ class ContentEditableAdapter implements InputAdapter {
     }
 
     deleteTrigger(length: number) {
+        // Refocus element first
+        this.el.focus();
+
+        // Try to restore saved range
+        if (this.savedRange) {
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(this.savedRange);
+        }
+
         const sel = window.getSelection();
         if (!sel?.rangeCount) return;
 
@@ -115,6 +172,9 @@ class ContentEditableAdapter implements InputAdapter {
             newRange.setStart(textNode, startOffset);
             newRange.collapse(true);
             sel.addRange(newRange);
+
+            // Save the new position
+            this.savedRange = newRange.cloneRange();
         } else {
             // Fallback: use execCommand delete
             for (let i = 0; i < length; i++) {
@@ -124,6 +184,7 @@ class ContentEditableAdapter implements InputAdapter {
     }
 
     insert(text: string) {
+        this.el.focus();
         document.execCommand('insertText', false, text);
     }
 }
@@ -135,6 +196,7 @@ class GmailAdapter extends ContentEditableAdapter {
 
         if (sel?.rangeCount) {
             const range = sel.getRangeAt(0);
+            this.savedRange = range.cloneRange();
 
             if (range.startContainer.nodeType === Node.TEXT_NODE) {
                 const text = range.startContainer.textContent || '';
