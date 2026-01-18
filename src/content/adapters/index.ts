@@ -163,30 +163,16 @@ class ContentEditableAdapter implements InputAdapter {
     }
 }
 
-// 3. WhatsApp-specific Adapter
+// 3. WhatsApp-specific Adapter (simplified - skip trigger deletion)
 class WhatsAppAdapter implements InputAdapter {
     private el: HTMLElement;
-    private savedRange: Range | null = null;
 
     constructor(el: HTMLElement) {
         this.el = el;
-        this.saveCurrentRange();
-    }
-
-    private saveCurrentRange() {
-        const sel = window.getSelection();
-        if (sel?.rangeCount) {
-            this.savedRange = sel.getRangeAt(0).cloneRange();
-        }
     }
 
     focus() {
         this.el.focus();
-        if (this.savedRange) {
-            const sel = window.getSelection();
-            sel?.removeAllRanges();
-            sel?.addRange(this.savedRange);
-        }
     }
 
     getContext(chars: number) {
@@ -194,7 +180,6 @@ class WhatsAppAdapter implements InputAdapter {
         if (!sel?.rangeCount) return '';
 
         const range = sel.getRangeAt(0);
-        this.savedRange = range.cloneRange();
 
         if (range.startContainer.nodeType === Node.TEXT_NODE) {
             const text = range.startContainer.textContent || '';
@@ -226,60 +211,15 @@ class WhatsAppAdapter implements InputAdapter {
         return { x: elRect.left + 10, y: elRect.bottom, height: elRect.height };
     }
 
-    deleteTrigger(length: number) {
-        this.el.focus();
-
-        if (this.savedRange) {
-            const sel = window.getSelection();
-            sel?.removeAllRanges();
-            sel?.addRange(this.savedRange);
-        }
-
-        // WhatsApp needs simulated keyboard backspace events
-        for (let i = 0; i < length; i++) {
-            // Try execCommand first
-            const success = document.execCommand('delete', false);
-            if (!success) {
-                // Fallback to simulating backspace key
-                const event = new KeyboardEvent('keydown', {
-                    key: 'Backspace',
-                    code: 'Backspace',
-                    keyCode: 8,
-                    which: 8,
-                    bubbles: true,
-                    cancelable: true
-                });
-                this.el.dispatchEvent(event);
-            }
-        }
-
-        // Dispatch input event to notify WhatsApp's React of changes
-        this.el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
+    // WhatsApp: Skip trigger deletion - let user delete manually
+    deleteTrigger(_length: number) {
+        // No-op for WhatsApp - user will delete trigger manually
+        // This avoids complex issues with WhatsApp's React implementation
     }
 
     insert(text: string) {
         this.el.focus();
-
-        // First try execCommand
-        const success = document.execCommand('insertText', false, text);
-
-        if (!success) {
-            // Fallback: Direct manipulation for WhatsApp
-            const sel = window.getSelection();
-            if (sel?.rangeCount) {
-                const range = sel.getRangeAt(0);
-                range.deleteContents();
-                const textNode = document.createTextNode(text);
-                range.insertNode(textNode);
-                range.setStartAfter(textNode);
-                range.collapse(true);
-                sel.removeAllRanges();
-                sel.addRange(range);
-            }
-        }
-
-        // Dispatch input event to notify WhatsApp's React
-        this.el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+        document.execCommand('insertText', false, text);
     }
 }
 
@@ -324,7 +264,7 @@ export function createAdapter(el: Element): InputAdapter | null {
         if (htmlEl.isContentEditable || htmlEl.getAttribute('contenteditable') === 'true') {
             const hostname = window.location.hostname;
 
-            // WhatsApp-specific adapter
+            // WhatsApp-specific adapter (simplified)
             if (hostname.includes('web.whatsapp.com')) {
                 return new WhatsAppAdapter(htmlEl);
             }
