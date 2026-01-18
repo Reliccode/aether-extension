@@ -259,13 +259,13 @@ export default function App() {
                             disabled={snippets.length === 0}
                             className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            <Download size={14} /> Export All
+                            <Upload size={14} /> Export All
                         </button>
                         <button
                             onClick={() => fileInputRef.current?.click()}
                             className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors cursor-pointer"
                         >
-                            <Upload size={14} /> Import
+                            <Download size={14} /> Import
                         </button>
                         <input
                             ref={fileInputRef}
