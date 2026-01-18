@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import type { Snippet, LanguageCode } from '../common/types';
-import { Plus, Search, Save, Trash2, Tag, Sparkles, Globe } from 'lucide-react';
+import { Plus, Search, Save, Trash2, Tag, Sparkles, Globe, Download, Upload } from 'lucide-react';
 import clsx from 'clsx';
 
 export default function App() {
     const [snippets, setSnippets] = useState<Snippet[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Form State
     const [formTitle, setFormTitle] = useState('');
@@ -105,6 +106,73 @@ export default function App() {
         });
     };
 
+    // Export Handler
+    const handleExport = () => {
+        const exportData = {
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            templates: snippets
+        };
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `aether-templates-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    // Import Handler
+    const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const data = JSON.parse(event.target?.result as string);
+                const templates = data.templates || data; // Support both formats
+
+                if (!Array.isArray(templates)) {
+                    alert('Invalid file format. Expected an array of templates.');
+                    return;
+                }
+
+                const count = templates.length;
+                if (!confirm(`Import ${count} templates? This will add to your existing templates.`)) {
+                    return;
+                }
+
+                // Import each template
+                let imported = 0;
+                for (const template of templates) {
+                    await new Promise<void>((resolve) => {
+                        chrome.runtime.sendMessage({
+                            type: 'SAVE_SNIPPET',
+                            payload: {
+                                title: template.title || 'Untitled',
+                                content: template.content || '',
+                                tags: template.tags || [],
+                                translations: template.translations || {}
+                            }
+                        }, () => {
+                            imported++;
+                            resolve();
+                        });
+                    });
+                }
+
+                alert(`Successfully imported ${imported} templates!`);
+                refreshData();
+            } catch {
+                alert('Failed to parse file. Please ensure it\'s a valid JSON export.');
+            }
+        };
+        reader.readAsText(file);
+        // Reset input so same file can be imported again
+        e.target.value = '';
+    };
+
     const filteredSnippets = snippets.filter(s =>
         s.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         s.tags.some(t => t.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -181,6 +249,35 @@ export default function App() {
                             </div>
                         ))
                     )}
+                </div>
+
+                {/* Export/Import Footer */}
+                <div className="p-3 border-t border-slate-200 bg-white">
+                    <div className="flex gap-2">
+                        <button
+                            onClick={handleExport}
+                            disabled={snippets.length === 0}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <Download size={14} /> Export All
+                        </button>
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors cursor-pointer"
+                        >
+                            <Upload size={14} /> Import
+                        </button>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".json"
+                            onChange={handleImport}
+                            className="hidden"
+                        />
+                    </div>
+                    <p className="text-[10px] text-slate-400 text-center mt-2">
+                        {snippets.length} template{snippets.length !== 1 ? 's' : ''} saved
+                    </p>
                 </div>
             </div>
 
