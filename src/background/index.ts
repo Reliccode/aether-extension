@@ -179,10 +179,13 @@ async function getPlaceholderHistory(key: string): Promise<string[]> {
     return (result[storageKey] as string[] | undefined) || [];
 }
 
-// Scan all tabs for names
+// Scan all tabs for names - Enhanced with rich data
 interface ExtractedName {
     name: string;
+    fullName: string;
     source: string;
+    subtitle: string;
+    favicon: string;
     confidence: number;
 }
 
@@ -201,7 +204,16 @@ async function scanTabsForNames(): Promise<ExtractedName[]> {
                 });
 
                 if (results?.[0]?.result) {
-                    allNames.push(...results[0].result);
+                    // Enhance with tab info (favicon)
+                    const extracted = results[0].result as ExtractedName[];
+                    extracted.forEach((item) => {
+                        item.favicon = tab.favIconUrl || '';
+                        // If no subtitle from extraction, use tab title
+                        if (!item.subtitle) {
+                            item.subtitle = tab.title || '';
+                        }
+                    });
+                    allNames.push(...extracted);
                 }
             } catch {
                 // Tab may not allow script injection
@@ -234,14 +246,8 @@ function extractNamesFromPage(): ExtractedName[] {
     // Better name validation - must look like a real name
     const isValidName = (str: string): boolean => {
         if (!str || str.length < 2 || str.length > 40) return false;
-
-        // Must start with capital letter and contain only letters/spaces
         if (!/^[A-Z][a-zA-Z\s'-]+$/.test(str)) return false;
-
-        // Should not be a single word less than 3 chars
         if (str.length < 3 && !str.includes(' ')) return false;
-
-        // Blacklist common non-name words
         const blacklist = [
             'you', 'me', 'admin', 'support', 'team', 'hello', 'hi', 'hey',
             'undefined', 'null', 'inbox', 'sent', 'draft', 'all', 'new',
@@ -251,7 +257,6 @@ function extractNamesFromPage(): ExtractedName[] {
             'ncba', 'astropay', 'infomail', 'todofollow'
         ];
         if (blacklist.includes(str.toLowerCase())) return false;
-
         return true;
     };
 
@@ -260,93 +265,101 @@ function extractNamesFromPage(): ExtractedName[] {
         return parts[0];
     };
 
-    // WhatsApp - Get current chat contact name
+    // WhatsApp - Get current chat contact name with phone number
     if (hostname.includes('web.whatsapp.com')) {
-        // Primary: Current conversation header
         const chatHeader = document.querySelector('[data-testid="conversation-header"] span[title]');
         if (chatHeader) {
-            const name = chatHeader.getAttribute('title');
-            if (name && isValidName(name)) {
-                names.push({ name: getFirstName(name), source: 'WhatsApp', confidence: 1.0 });
-            }
-        }
-
-        // Fallback: Try alternate selector
-        const headerSpan = document.querySelector('header span[dir="auto"]');
-        if (headerSpan && names.length === 0) {
-            const name = headerSpan.textContent?.trim();
-            if (name && isValidName(name)) {
-                names.push({ name: getFirstName(name), source: 'WhatsApp', confidence: 0.9 });
+            const fullName = chatHeader.getAttribute('title') || '';
+            if (fullName && isValidName(fullName)) {
+                // Try to get phone number from chat info
+                const phoneEl = document.querySelector('[data-testid="conversation-header"] span[title*="+"]');
+                const phone = phoneEl?.getAttribute('title') || '';
+                names.push({
+                    name: getFirstName(fullName),
+                    fullName,
+                    source: 'WhatsApp',
+                    subtitle: phone || fullName,
+                    favicon: '',
+                    confidence: 1.0
+                });
             }
         }
     }
 
-    // Gmail - Get recipients from compose or email thread
+    // Gmail - Get recipients with email
     else if (hostname.includes('mail.google.com')) {
-        // Compose recipients
         const recipients = document.querySelectorAll('[data-hovercard-id] span[email]');
         recipients.forEach((el) => {
-            const name = el.textContent?.trim();
-            if (name && isValidName(name)) {
-                names.push({ name: getFirstName(name), source: 'Gmail', confidence: 0.95 });
-            }
-        });
-
-        // Email sender in thread
-        const senders = document.querySelectorAll('[data-message-id] [email]');
-        senders.forEach((el) => {
-            const name = el.getAttribute('name');
-            if (name && isValidName(name)) {
-                names.push({ name: getFirstName(name), source: 'Gmail', confidence: 0.85 });
+            const fullName = el.textContent?.trim() || '';
+            const email = el.getAttribute('email') || '';
+            if (fullName && isValidName(fullName)) {
+                names.push({
+                    name: getFirstName(fullName),
+                    fullName,
+                    source: 'Gmail',
+                    subtitle: email,
+                    favicon: '',
+                    confidence: 0.95
+                });
             }
         });
     }
 
-    // Conduit - Get guest name from conversation
+    // Conduit - Get guest name
     else if (hostname.includes('conduit')) {
-        // SPECIFIC SELECTOR: Guest name in conversation header
-        // The selector from user's inspect: p.truncate.text-title-lg
         const guestName = document.querySelector('p.text-title-lg, p.truncate.text-title-lg');
         if (guestName) {
-            const name = guestName.textContent?.trim();
-            if (name && isValidName(name)) {
-                names.push({ name: getFirstName(name), source: 'Conduit', confidence: 1.0 });
-            }
-        }
-
-        // Fallback: Look for profile picture alt text
-        const profileImg = document.querySelector('img[alt*="profile"]');
-        if (profileImg && names.length === 0) {
-            const alt = profileImg.getAttribute('alt');
-            const match = alt?.match(/profile[:\s]+(.+)/i);
-            if (match && isValidName(match[1])) {
-                names.push({ name: getFirstName(match[1]), source: 'Conduit', confidence: 0.8 });
+            const fullName = guestName.textContent?.trim() || '';
+            if (fullName && isValidName(fullName)) {
+                names.push({
+                    name: getFirstName(fullName),
+                    fullName,
+                    source: 'Conduit',
+                    subtitle: 'Guest',
+                    favicon: '',
+                    confidence: 1.0
+                });
             }
         }
     }
 
-    // YouTube - Get video creator name
+    // YouTube - Get video creator name with video title
     else if (hostname.includes('youtube.com')) {
         const channelName = document.querySelector('#owner #channel-name a, #upload-info #channel-name a');
+        const videoTitle = document.querySelector('h1.ytd-video-primary-info-renderer, h1.ytd-watch-metadata')?.textContent?.trim();
         if (channelName) {
-            const name = channelName.textContent?.trim();
-            if (name && isValidName(name)) {
-                names.push({ name: getFirstName(name), source: 'YouTube', confidence: 0.7 });
+            const fullName = channelName.textContent?.trim() || '';
+            if (fullName && isValidName(fullName)) {
+                names.push({
+                    name: getFirstName(fullName),
+                    fullName,
+                    source: 'YouTube',
+                    subtitle: videoTitle || document.title,
+                    favicon: '',
+                    confidence: 0.7
+                });
             }
         }
     }
 
-    // GitHub - Get profile name
+    // GitHub - Get profile name with username
     else if (hostname.includes('github.com')) {
         const profileName = document.querySelector('[itemprop="name"], .p-name');
+        const username = document.querySelector('[itemprop="additionalName"]')?.textContent?.trim();
         if (profileName) {
-            const name = profileName.textContent?.trim();
-            if (name && isValidName(name)) {
-                names.push({ name: getFirstName(name), source: 'GitHub', confidence: 0.8 });
+            const fullName = profileName.textContent?.trim() || '';
+            if (fullName && isValidName(fullName)) {
+                names.push({
+                    name: getFirstName(fullName),
+                    fullName,
+                    source: 'GitHub',
+                    subtitle: username ? `@${username}` : '',
+                    favicon: '',
+                    confidence: 0.8
+                });
             }
         }
     }
 
     return names;
 }
-

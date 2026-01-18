@@ -16,8 +16,8 @@ let root: Root | null = null;
 let currentAdapter: InputAdapter | null = null;
 let lastTriggerLength: number = 0;
 
-const POPUP_HEIGHT = 300;
-const POPUP_WIDTH = 384;
+const POPUP_HEIGHT = 400;
+const POPUP_WIDTH = 400;
 
 function getOrCreateOverlay() {
     if (currentOverlay && currentHost && document.body.contains(currentHost)) {
@@ -172,12 +172,23 @@ function showPlaceholderForm(x: number, y: number, content: string) {
     const viewportHeight = window.innerHeight;
     const viewportWidth = window.innerWidth;
 
-    let finalY = y + 8;
-    if (finalY + POPUP_HEIGHT > viewportHeight) {
-        finalY = Math.max(8, y - POPUP_HEIGHT - 8);
+    // Position popup above cursor for bottom inputs (like WhatsApp)
+    const cursorNearBottom = y > viewportHeight * 0.5;
+    let finalY: number;
+
+    if (cursorNearBottom) {
+        finalY = Math.max(16, y - POPUP_HEIGHT - 8);
+    } else {
+        finalY = Math.min(y + 8, viewportHeight - POPUP_HEIGHT - 16);
     }
 
-    let finalX = Math.max(8, Math.min(x, viewportWidth - POPUP_WIDTH - 8));
+    // Ensure popup fits in viewport
+    if (finalY + POPUP_HEIGHT > viewportHeight - 50) {
+        finalY = viewportHeight - POPUP_HEIGHT - 50;
+    }
+    finalY = Math.max(16, finalY);
+
+    let finalX = Math.max(16, Math.min(x, viewportWidth - POPUP_WIDTH - 16));
 
     if (!root) root = createRoot(container);
 
@@ -185,6 +196,7 @@ function showPlaceholderForm(x: number, y: number, content: string) {
         <div style={{ position: 'fixed', left: finalX, top: finalY, pointerEvents: 'auto' }}>
             <PlaceholderForm
                 placeholders={placeholders}
+                templateContent={content}
                 onSubmit={handlePlaceholderSubmit}
                 onCancel={hideOverlay}
             />
