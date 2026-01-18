@@ -3,6 +3,7 @@
 export interface InputAdapter {
     getContext(chars: number): string;
     getCoordinates(): { x: number; y: number; height: number } | null;
+    deleteTrigger(length: number): void;
     insert(text: string): void;
 }
 
@@ -30,6 +31,13 @@ class NativeAdapter implements InputAdapter {
         };
     }
 
+    deleteTrigger(length: number) {
+        const start = this.el.selectionStart || 0;
+        const deleteStart = Math.max(0, start - length);
+        this.el.setRangeText('', deleteStart, start, 'end');
+        this.el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
     insert(text: string) {
         const start = this.el.selectionStart || 0;
         const end = this.el.selectionEnd || 0;
@@ -40,7 +48,7 @@ class NativeAdapter implements InputAdapter {
 
 // 2. ContentEditable Adapter (Gmail, WhatsApp, etc.)
 class ContentEditableAdapter implements InputAdapter {
-    private el: HTMLElement;
+    protected el: HTMLElement;
 
     constructor(el: HTMLElement) {
         this.el = el;
@@ -82,6 +90,39 @@ class ContentEditableAdapter implements InputAdapter {
         return { x: elRect.left + 10, y: elRect.bottom, height: elRect.height };
     }
 
+    deleteTrigger(length: number) {
+        const sel = window.getSelection();
+        if (!sel?.rangeCount) return;
+
+        const range = sel.getRangeAt(0);
+
+        if (range.startContainer.nodeType === Node.TEXT_NODE) {
+            const textNode = range.startContainer as Text;
+            const endOffset = range.startOffset;
+            const startOffset = Math.max(0, endOffset - length);
+
+            // Create a range that selects the trigger text
+            const deleteRange = document.createRange();
+            deleteRange.setStart(textNode, startOffset);
+            deleteRange.setEnd(textNode, endOffset);
+
+            // Delete the selected range
+            deleteRange.deleteContents();
+
+            // Collapse selection to the deletion point
+            sel.removeAllRanges();
+            const newRange = document.createRange();
+            newRange.setStart(textNode, startOffset);
+            newRange.collapse(true);
+            sel.addRange(newRange);
+        } else {
+            // Fallback: use execCommand delete
+            for (let i = 0; i < length; i++) {
+                document.execCommand('delete', false);
+            }
+        }
+    }
+
     insert(text: string) {
         document.execCommand('insertText', false, text);
     }
@@ -117,7 +158,6 @@ export function createAdapter(el: Element): InputAdapter | null {
     const tagName = el.tagName?.toUpperCase();
 
     if (tagName === 'INPUT' || tagName === 'TEXTAREA') {
-        console.log('⚡ Aether: Using NativeAdapter for', tagName);
         return new NativeAdapter(el as HTMLInputElement);
     }
 
@@ -127,7 +167,6 @@ export function createAdapter(el: Element): InputAdapter | null {
 
         if (htmlEl.isContentEditable || htmlEl.getAttribute('contenteditable') === 'true') {
             const isGmail = window.location.hostname.includes('mail.google.com');
-            console.log('⚡ Aether: Using', isGmail ? 'GmailAdapter' : 'ContentEditableAdapter', 'for', htmlEl.tagName);
             return isGmail ? new GmailAdapter(htmlEl) : new ContentEditableAdapter(htmlEl);
         }
 
@@ -135,10 +174,8 @@ export function createAdapter(el: Element): InputAdapter | null {
     }
 
     if (el.getAttribute('role') === 'textbox') {
-        console.log('⚡ Aether: Using ContentEditableAdapter for role=textbox');
         return new ContentEditableAdapter(el as HTMLElement);
     }
 
-    console.log('⚡ Aether: No adapter for', el.tagName, el);
     return null;
 }

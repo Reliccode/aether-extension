@@ -103,9 +103,7 @@ function handleSelect(content: string, _id: string) {
         const match = context.match(/\/\w*$/);
         if (match) {
             const triggerLength = match[0].length;
-            for (let i = 0; i < triggerLength; i++) {
-                document.execCommand('delete', false);
-            }
+            currentAdapter.deleteTrigger(triggerLength);
         }
         currentAdapter.insert(content);
     }
