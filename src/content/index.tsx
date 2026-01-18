@@ -12,6 +12,7 @@ let currentHost: HTMLElement | null = null;
 let currentOverlay: HTMLElement | null = null;
 let root: Root | null = null;
 let currentAdapter: InputAdapter | null = null;
+let lastTriggerLength: number = 0;
 
 const POPUP_HEIGHT = 300;
 const POPUP_WIDTH = 384;
@@ -68,6 +69,7 @@ function checkForTrigger(target: Element) {
 
     if (match) {
         const query = match[1];
+        lastTriggerLength = match[0].length; // Store trigger length for later
         currentAdapter = adapter;
 
         if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return;
@@ -80,7 +82,6 @@ function checkForTrigger(target: Element) {
 
                     const coords = adapter.getCoordinates();
                     if (coords) {
-                        // Always show overlay, even if no results
                         showOverlay(coords.x, coords.y, results || []);
                     }
                 }
@@ -97,19 +98,75 @@ document.addEventListener('input', handleInput, true);
 document.addEventListener('keyup', handleInput, true);
 document.addEventListener('compositionend', handleInput, true);
 
-function handleSelect(content: string, _id: string) {
-    if (currentAdapter) {
-        // Ensure focus is on the input before manipulation
-        currentAdapter.focus();
-
-        const context = currentAdapter.getContext(30);
-        const match = context.match(/\/\w*$/);
-        if (match) {
-            const triggerLength = match[0].length;
-            currentAdapter.deleteTrigger(triggerLength);
+// Clipboard-based insertion - works universally
+async function clipboardInsert(text: string, triggerLength: number): Promise<boolean> {
+    try {
+        // 1. Save original clipboard content
+        let originalClipboard = '';
+        try {
+            originalClipboard = await navigator.clipboard.readText();
+        } catch {
+            // Clipboard might be empty or inaccessible
         }
-        currentAdapter.insert(content);
+
+        // 2. Focus and select the trigger text
+        if (currentAdapter) {
+            currentAdapter.focus();
+            currentAdapter.selectBackward(triggerLength);
+        }
+
+        // 3. Small delay to ensure selection is registered
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        // 4. Copy template to clipboard
+        await navigator.clipboard.writeText(text);
+
+        // 5. Execute paste - this replaces the selected trigger with the template
+        document.execCommand('paste');
+
+        // 6. Restore original clipboard after a short delay
+        setTimeout(async () => {
+            try {
+                await navigator.clipboard.writeText(originalClipboard);
+            } catch {
+                // Ignore clipboard restore errors
+            }
+        }, 100);
+
+        return true;
+    } catch (error) {
+        console.error('Clipboard insert failed:', error);
+        return false;
     }
+}
+
+// Fallback insertion for when clipboard fails
+function fallbackInsert(text: string, triggerLength: number) {
+    if (!currentAdapter) return;
+
+    currentAdapter.focus();
+    currentAdapter.selectBackward(triggerLength);
+
+    // Try execCommand insertText
+    const success = document.execCommand('insertText', false, text);
+
+    if (!success) {
+        // Last resort: just insert at cursor without deleting trigger
+        document.execCommand('insertText', false, text);
+    }
+}
+
+async function handleSelect(content: string, _id: string) {
+    const triggerLength = lastTriggerLength;
+
+    // Try clipboard-based insertion first
+    const success = await clipboardInsert(content, triggerLength);
+
+    if (!success) {
+        // Fallback to execCommand
+        fallbackInsert(content, triggerLength);
+    }
+
     hideOverlay();
 }
 
@@ -151,4 +208,5 @@ function hideOverlay() {
     currentHost = null;
     currentOverlay = null;
     currentAdapter = null;
+    lastTriggerLength = 0;
 }

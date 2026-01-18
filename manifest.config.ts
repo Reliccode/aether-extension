@@ -24,7 +24,7 @@ export default defineManifest(async (env) => ({
             all_frames: true,
         },
     ],
-    permissions: ['storage', 'activeTab', 'scripting'],
+    permissions: ['storage', 'activeTab', 'scripting', 'clipboardRead', 'clipboardWrite'],
     web_accessible_resources: [
         {
             resources: ['*.wasm', '*.onnx', '*.css'],
