@@ -5,6 +5,8 @@ import { createAdapter } from './adapters';
 import type { InputAdapter } from './adapters';
 import type { SearchResult } from '../common/types';
 import { SuggestionList } from './ui/SuggestionList';
+import { PlaceholderForm } from './ui/PlaceholderForm';
+import { parseTemplate, fillTemplate, hasPlaceholders } from '../common/placeholders';
 
 import css from './content.css?inline';
 
@@ -69,7 +71,7 @@ function checkForTrigger(target: Element) {
 
     if (match) {
         const query = match[1];
-        lastTriggerLength = match[0].length; // Store trigger length for later
+        lastTriggerLength = match[0].length;
         currentAdapter = adapter;
 
         if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return;
@@ -98,75 +100,118 @@ document.addEventListener('input', handleInput, true);
 document.addEventListener('keyup', handleInput, true);
 document.addEventListener('compositionend', handleInput, true);
 
-// Clipboard-based insertion - works universally
+// Clipboard-based insertion
 async function clipboardInsert(text: string, triggerLength: number): Promise<boolean> {
     try {
-        // 1. Save original clipboard content
         let originalClipboard = '';
         try {
             originalClipboard = await navigator.clipboard.readText();
         } catch {
-            // Clipboard might be empty or inaccessible
+            // Clipboard might be empty
         }
 
-        // 2. Focus and select the trigger text
         if (currentAdapter) {
             currentAdapter.focus();
             currentAdapter.selectBackward(triggerLength);
         }
 
-        // 3. Small delay to ensure selection is registered
         await new Promise(resolve => setTimeout(resolve, 10));
-
-        // 4. Copy template to clipboard
         await navigator.clipboard.writeText(text);
-
-        // 5. Execute paste - this replaces the selected trigger with the template
         document.execCommand('paste');
 
-        // 6. Restore original clipboard after a short delay
         setTimeout(async () => {
             try {
                 await navigator.clipboard.writeText(originalClipboard);
             } catch {
-                // Ignore clipboard restore errors
+                // Ignore
             }
         }, 100);
 
         return true;
-    } catch (error) {
-        console.error('Clipboard insert failed:', error);
+    } catch {
         return false;
     }
 }
 
-// Fallback insertion for when clipboard fails
+// Fallback insertion
 function fallbackInsert(text: string, triggerLength: number) {
     if (!currentAdapter) return;
-
     currentAdapter.focus();
     currentAdapter.selectBackward(triggerLength);
-
-    // Try execCommand insertText
-    const success = document.execCommand('insertText', false, text);
-
-    if (!success) {
-        // Last resort: just insert at cursor without deleting trigger
-        document.execCommand('insertText', false, text);
-    }
+    document.execCommand('insertText', false, text);
 }
 
-async function handleSelect(content: string, _id: string) {
-    const triggerLength = lastTriggerLength;
+// Store pending template data for placeholder form
+let pendingTemplate: { content: string; id: string; coords: { x: number; y: number } } | null = null;
 
-    // Try clipboard-based insertion first
-    const success = await clipboardInsert(content, triggerLength);
-
-    if (!success) {
-        // Fallback to execCommand
-        fallbackInsert(content, triggerLength);
+async function handleSelect(content: string, id: string) {
+    // Check if template has placeholders
+    if (hasPlaceholders(content)) {
+        // Get coordinates for form positioning
+        const coords = currentAdapter?.getCoordinates();
+        if (coords) {
+            pendingTemplate = { content, id, coords };
+            showPlaceholderForm(coords.x, coords.y, content);
+        }
+        return;
     }
 
+    // No placeholders - insert directly
+    const triggerLength = lastTriggerLength;
+    const success = await clipboardInsert(content, triggerLength);
+    if (!success) {
+        fallbackInsert(content, triggerLength);
+    }
+    hideOverlay();
+}
+
+function showPlaceholderForm(x: number, y: number, content: string) {
+    const container = getOrCreateOverlay();
+    const placeholders = parseTemplate(content);
+
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+
+    let finalY = y + 8;
+    if (finalY + POPUP_HEIGHT > viewportHeight) {
+        finalY = Math.max(8, y - POPUP_HEIGHT - 8);
+    }
+
+    let finalX = Math.max(8, Math.min(x, viewportWidth - POPUP_WIDTH - 8));
+
+    if (!root) root = createRoot(container);
+
+    root.render(
+        <div style={{ position: 'fixed', left: finalX, top: finalY, pointerEvents: 'auto' }}>
+            <PlaceholderForm
+                placeholders={placeholders}
+                onSubmit={handlePlaceholderSubmit}
+                onCancel={hideOverlay}
+            />
+        </div>
+    );
+}
+
+async function handlePlaceholderSubmit(values: Record<string, string>) {
+    if (!pendingTemplate) {
+        hideOverlay();
+        return;
+    }
+
+    // Fill template with values
+    const filledContent = fillTemplate(pendingTemplate.content, values);
+    const triggerLength = lastTriggerLength;
+
+    // Track usage
+    chrome.runtime.sendMessage({ type: 'UPDATE_USAGE', payload: { id: pendingTemplate.id } });
+
+    // Insert filled template
+    const success = await clipboardInsert(filledContent, triggerLength);
+    if (!success) {
+        fallbackInsert(filledContent, triggerLength);
+    }
+
+    pendingTemplate = null;
     hideOverlay();
 }
 
@@ -209,4 +254,5 @@ function hideOverlay() {
     currentOverlay = null;
     currentAdapter = null;
     lastTriggerLength = 0;
+    pendingTemplate = null;
 }

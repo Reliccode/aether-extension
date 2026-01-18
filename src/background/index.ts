@@ -122,5 +122,118 @@ chrome.runtime.onMessage.addListener((
         return true;
     }
 
+    if (message?.type === 'SCAN_TABS_FOR_NAMES') {
+        scanTabsForNames().then(names => {
+            sendResponse(names);
+        }).catch(() => sendResponse([]));
+        return true;
+    }
+
     return false;
 });
+
+// Scan all tabs for names
+interface ExtractedName {
+    name: string;
+    source: string;
+    confidence: number;
+}
+
+async function scanTabsForNames(): Promise<ExtractedName[]> {
+    try {
+        const tabs = await chrome.tabs.query({});
+        const allNames: ExtractedName[] = [];
+
+        for (const tab of tabs) {
+            if (!tab.id || !tab.url || tab.url.startsWith('chrome://')) continue;
+
+            try {
+                const results = await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    func: extractNamesFromPage,
+                });
+
+                if (results?.[0]?.result) {
+                    allNames.push(...results[0].result);
+                }
+            } catch {
+                // Tab may not allow script injection
+            }
+        }
+
+        // Deduplicate and sort by confidence
+        const seen = new Map<string, ExtractedName>();
+        for (const item of allNames) {
+            const key = item.name.toLowerCase();
+            const existing = seen.get(key);
+            if (!existing || item.confidence > existing.confidence) {
+                seen.set(key, item);
+            }
+        }
+
+        return Array.from(seen.values())
+            .sort((a, b) => b.confidence - a.confidence)
+            .slice(0, 5);
+    } catch {
+        return [];
+    }
+}
+
+// Function to be injected into tabs
+function extractNamesFromPage(): ExtractedName[] {
+    const names: ExtractedName[] = [];
+    const hostname = window.location.hostname;
+
+    const isValidName = (str: string): boolean => {
+        if (!str || str.length < 2 || str.length > 50) return false;
+        if (!/[a-zA-Z]/.test(str)) return false;
+        if (/^\+?\d[\d\s-]+$/.test(str)) return false;
+        if (/@/.test(str)) return false;
+        const blacklist = ['you', 'me', 'admin', 'support', 'team', 'hello', 'hi', 'hey', 'undefined'];
+        if (blacklist.includes(str.toLowerCase())) return false;
+        return true;
+    };
+
+    const getFirstName = (fullName: string): string => fullName.trim().split(/\s+/)[0];
+
+    // WhatsApp
+    if (hostname.includes('web.whatsapp.com')) {
+        const chatHeader = document.querySelector('[data-testid="conversation-header"] span[title]');
+        if (chatHeader) {
+            const name = chatHeader.getAttribute('title');
+            if (name && isValidName(name)) {
+                names.push({ name: getFirstName(name), source: 'WhatsApp', confidence: 1.0 });
+            }
+        }
+    }
+    // Gmail
+    else if (hostname.includes('mail.google.com')) {
+        const emailChips = document.querySelectorAll('[email]');
+        emailChips.forEach((chip) => {
+            const name = chip.getAttribute('name') || chip.textContent;
+            if (name && isValidName(name)) {
+                names.push({ name: getFirstName(name), source: 'Gmail', confidence: 0.9 });
+            }
+        });
+    }
+    // Conduit
+    else if (hostname.includes('conduit')) {
+        const headers = document.querySelectorAll('h1, h2, h3, [class*="guest"], [class*="name"], [class*="title"]');
+        headers.forEach((el) => {
+            const text = el.textContent?.trim();
+            if (text && isValidName(text) && text.length < 30) {
+                names.push({ name: getFirstName(text), source: 'Conduit', confidence: 0.95 });
+            }
+        });
+    }
+    // Generic
+    else {
+        const title = document.title;
+        const titleMatch = title.match(/^([A-Z][a-z]+)/);
+        if (titleMatch && isValidName(titleMatch[1])) {
+            names.push({ name: titleMatch[1], source: hostname, confidence: 0.5 });
+        }
+    }
+
+    return names;
+}
