@@ -184,20 +184,38 @@ function extractNamesFromPage(): ExtractedName[] {
     const names: ExtractedName[] = [];
     const hostname = window.location.hostname;
 
+    // Better name validation - must look like a real name
     const isValidName = (str: string): boolean => {
-        if (!str || str.length < 2 || str.length > 50) return false;
-        if (!/[a-zA-Z]/.test(str)) return false;
-        if (/^\+?\d[\d\s-]+$/.test(str)) return false;
-        if (/@/.test(str)) return false;
-        const blacklist = ['you', 'me', 'admin', 'support', 'team', 'hello', 'hi', 'hey', 'undefined'];
+        if (!str || str.length < 2 || str.length > 40) return false;
+
+        // Must start with capital letter and contain only letters/spaces
+        if (!/^[A-Z][a-zA-Z\s'-]+$/.test(str)) return false;
+
+        // Should not be a single word less than 3 chars
+        if (str.length < 3 && !str.includes(' ')) return false;
+
+        // Blacklist common non-name words
+        const blacklist = [
+            'you', 'me', 'admin', 'support', 'team', 'hello', 'hi', 'hey',
+            'undefined', 'null', 'inbox', 'sent', 'draft', 'all', 'new',
+            'message', 'messages', 'chat', 'user', 'guest', 'home', 'settings',
+            'notification', 'notifications', 'search', 'menu', 'profile',
+            'google', 'gmail', 'youtube', 'whatsapp', 'conduit', 'internet',
+            'ncba', 'astropay', 'infomail', 'todofollow'
+        ];
         if (blacklist.includes(str.toLowerCase())) return false;
+
         return true;
     };
 
-    const getFirstName = (fullName: string): string => fullName.trim().split(/\s+/)[0];
+    const getFirstName = (fullName: string): string => {
+        const parts = fullName.trim().split(/\s+/);
+        return parts[0];
+    };
 
-    // WhatsApp
+    // WhatsApp - Get current chat contact name
     if (hostname.includes('web.whatsapp.com')) {
+        // Primary: Current conversation header
         const chatHeader = document.querySelector('[data-testid="conversation-header"] span[title]');
         if (chatHeader) {
             const name = chatHeader.getAttribute('title');
@@ -205,35 +223,83 @@ function extractNamesFromPage(): ExtractedName[] {
                 names.push({ name: getFirstName(name), source: 'WhatsApp', confidence: 1.0 });
             }
         }
-    }
-    // Gmail
-    else if (hostname.includes('mail.google.com')) {
-        const emailChips = document.querySelectorAll('[email]');
-        emailChips.forEach((chip) => {
-            const name = chip.getAttribute('name') || chip.textContent;
+
+        // Fallback: Try alternate selector
+        const headerSpan = document.querySelector('header span[dir="auto"]');
+        if (headerSpan && names.length === 0) {
+            const name = headerSpan.textContent?.trim();
             if (name && isValidName(name)) {
-                names.push({ name: getFirstName(name), source: 'Gmail', confidence: 0.9 });
+                names.push({ name: getFirstName(name), source: 'WhatsApp', confidence: 0.9 });
+            }
+        }
+    }
+
+    // Gmail - Get recipients from compose or email thread
+    else if (hostname.includes('mail.google.com')) {
+        // Compose recipients
+        const recipients = document.querySelectorAll('[data-hovercard-id] span[email]');
+        recipients.forEach((el) => {
+            const name = el.textContent?.trim();
+            if (name && isValidName(name)) {
+                names.push({ name: getFirstName(name), source: 'Gmail', confidence: 0.95 });
+            }
+        });
+
+        // Email sender in thread
+        const senders = document.querySelectorAll('[data-message-id] [email]');
+        senders.forEach((el) => {
+            const name = el.getAttribute('name');
+            if (name && isValidName(name)) {
+                names.push({ name: getFirstName(name), source: 'Gmail', confidence: 0.85 });
             }
         });
     }
-    // Conduit
+
+    // Conduit - Get guest name from conversation
     else if (hostname.includes('conduit')) {
-        const headers = document.querySelectorAll('h1, h2, h3, [class*="guest"], [class*="name"], [class*="title"]');
-        headers.forEach((el) => {
-            const text = el.textContent?.trim();
-            if (text && isValidName(text) && text.length < 30) {
-                names.push({ name: getFirstName(text), source: 'Conduit', confidence: 0.95 });
+        // SPECIFIC SELECTOR: Guest name in conversation header
+        // The selector from user's inspect: p.truncate.text-title-lg
+        const guestName = document.querySelector('p.text-title-lg, p.truncate.text-title-lg');
+        if (guestName) {
+            const name = guestName.textContent?.trim();
+            if (name && isValidName(name)) {
+                names.push({ name: getFirstName(name), source: 'Conduit', confidence: 1.0 });
             }
-        });
+        }
+
+        // Fallback: Look for profile picture alt text
+        const profileImg = document.querySelector('img[alt*="profile"]');
+        if (profileImg && names.length === 0) {
+            const alt = profileImg.getAttribute('alt');
+            const match = alt?.match(/profile[:\s]+(.+)/i);
+            if (match && isValidName(match[1])) {
+                names.push({ name: getFirstName(match[1]), source: 'Conduit', confidence: 0.8 });
+            }
+        }
     }
-    // Generic
-    else {
-        const title = document.title;
-        const titleMatch = title.match(/^([A-Z][a-z]+)/);
-        if (titleMatch && isValidName(titleMatch[1])) {
-            names.push({ name: titleMatch[1], source: hostname, confidence: 0.5 });
+
+    // YouTube - Get video creator name
+    else if (hostname.includes('youtube.com')) {
+        const channelName = document.querySelector('#owner #channel-name a, #upload-info #channel-name a');
+        if (channelName) {
+            const name = channelName.textContent?.trim();
+            if (name && isValidName(name)) {
+                names.push({ name: getFirstName(name), source: 'YouTube', confidence: 0.7 });
+            }
+        }
+    }
+
+    // GitHub - Get profile name
+    else if (hostname.includes('github.com')) {
+        const profileName = document.querySelector('[itemprop="name"], .p-name');
+        if (profileName) {
+            const name = profileName.textContent?.trim();
+            if (name && isValidName(name)) {
+                names.push({ name: getFirstName(name), source: 'GitHub', confidence: 0.8 });
+            }
         }
     }
 
     return names;
 }
+
