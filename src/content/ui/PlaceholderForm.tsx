@@ -65,7 +65,6 @@ export function PlaceholderForm({ placeholders, onSubmit, onCancel }: Props) {
     return (
         <div
             className="bg-white rounded-xl shadow-2xl border border-gray-200 w-96 overflow-hidden"
-            onMouseDown={(e) => e.preventDefault()}
         >
             {/* Header */}
             <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-4">
