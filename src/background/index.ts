@@ -129,8 +129,55 @@ chrome.runtime.onMessage.addListener((
         return true;
     }
 
+    // Save placeholder value to history
+    if (message?.type === 'SAVE_PLACEHOLDER_VALUE') {
+        const { key, value } = message.payload as { key: string; value: string };
+        saveToPlaceholderHistory(key, value).then(() => {
+            sendResponse(true);
+        }).catch(() => sendResponse(false));
+        return true;
+    }
+
+    // Get placeholder history
+    if (message?.type === 'GET_PLACEHOLDER_HISTORY') {
+        const { key } = message.payload as { key: string };
+        getPlaceholderHistory(key).then(history => {
+            sendResponse(history);
+        }).catch(() => sendResponse([]));
+        return true;
+    }
+
     return false;
 });
+
+// Placeholder history storage functions
+const HISTORY_KEY_PREFIX = 'placeholder_history_';
+const MAX_HISTORY_PER_KEY = 5;
+
+async function saveToPlaceholderHistory(key: string, value: string): Promise<void> {
+    if (!value.trim()) return;
+
+    const storageKey = HISTORY_KEY_PREFIX + key.toLowerCase();
+    const result = await chrome.storage.local.get(storageKey);
+    let history: string[] = (result[storageKey] as string[] | undefined) || [];
+
+    // Remove if already exists (to move to front)
+    history = history.filter(v => v !== value);
+
+    // Add to front
+    history.unshift(value);
+
+    // Keep only last N
+    history = history.slice(0, MAX_HISTORY_PER_KEY);
+
+    await chrome.storage.local.set({ [storageKey]: history });
+}
+
+async function getPlaceholderHistory(key: string): Promise<string[]> {
+    const storageKey = HISTORY_KEY_PREFIX + key.toLowerCase();
+    const result = await chrome.storage.local.get(storageKey);
+    return (result[storageKey] as string[] | undefined) || [];
+}
 
 // Scan all tabs for names
 interface ExtractedName {
