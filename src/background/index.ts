@@ -179,7 +179,7 @@ async function getPlaceholderHistory(key: string): Promise<string[]> {
     return (result[storageKey] as string[] | undefined) || [];
 }
 
-// Scan all tabs for names - Enhanced with rich data
+// Scan all tabs for names - Enhanced with event-driven caching
 interface ExtractedName {
     name: string;
     fullName: string;
@@ -189,54 +189,157 @@ interface ExtractedName {
     confidence: number;
 }
 
+interface CachedName extends ExtractedName {
+    cachedAt: number;
+    tabId: number;
+}
+
+const NAMES_CACHE_KEY = 'cached_names';
+const CACHE_MAX_AGE = 30 * 60 * 1000; // 30 minutes
+
+// URLs we care about for name extraction
+const RELEVANT_URLS = [
+    'web.whatsapp.com',
+    'mail.google.com',
+    'conduit',
+    'youtube.com',
+    'github.com'
+];
+
+function isRelevantUrl(url: string): boolean {
+    return RELEVANT_URLS.some(pattern => url.includes(pattern));
+}
+
+// Cache management functions
+async function getCachedNames(): Promise<CachedName[]> {
+    const result = await chrome.storage.local.get(NAMES_CACHE_KEY);
+    const names = (result[NAMES_CACHE_KEY] as CachedName[] | undefined) || [];
+    const now = Date.now();
+    // Filter out expired entries
+    return names.filter(n => now - n.cachedAt < CACHE_MAX_AGE);
+}
+
+async function saveToCachedNames(names: ExtractedName[], tabId: number, favicon: string): Promise<void> {
+    const existing = await getCachedNames();
+    const now = Date.now();
+
+    // Remove old entries from the same tab
+    const filtered = existing.filter(n => n.tabId !== tabId);
+
+    // Add new entries
+    const newEntries: CachedName[] = names.map(n => ({
+        ...n,
+        favicon: n.favicon || favicon,
+        cachedAt: now,
+        tabId
+    }));
+
+    // Merge and deduplicate by name
+    const merged = [...filtered, ...newEntries];
+    const seen = new Map<string, CachedName>();
+    for (const item of merged) {
+        const key = item.name.toLowerCase();
+        const existing = seen.get(key);
+        if (!existing || item.confidence > existing.confidence || item.cachedAt > existing.cachedAt) {
+            seen.set(key, item);
+        }
+    }
+
+    // Keep only top 20 entries
+    const final = Array.from(seen.values())
+        .sort((a, b) => b.cachedAt - a.cachedAt)
+        .slice(0, 20);
+
+    await chrome.storage.local.set({ [NAMES_CACHE_KEY]: final });
+}
+
+// Event-driven: Extract names when user visits relevant pages
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+    // Only process when page finishes loading
+    if (changeInfo.status !== 'complete') return;
+    if (!tab.url || !isRelevantUrl(tab.url)) return;
+
+    try {
+        const results = await chrome.scripting.executeScript({
+            target: { tabId },
+            func: extractNamesFromPage,
+        });
+
+        if (results?.[0]?.result) {
+            const extracted = results[0].result as ExtractedName[];
+            if (extracted.length > 0) {
+                await saveToCachedNames(extracted, tabId, tab.favIconUrl || '');
+            }
+        }
+    } catch {
+        // Tab may not allow script injection (e.g., chrome:// pages)
+    }
+});
+
+// Clean up cache when tab closes
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+    const existing = await getCachedNames();
+    const filtered = existing.filter(n => n.tabId !== tabId);
+    await chrome.storage.local.set({ [NAMES_CACHE_KEY]: filtered });
+});
+
+// Optimized: Read from cache first, only scan active tab as fallback
 async function scanTabsForNames(): Promise<ExtractedName[]> {
     try {
-        const tabs = await chrome.tabs.query({});
-        const allNames: ExtractedName[] = [];
+        // Step 1: Get cached names (instant)
+        const cached = await getCachedNames();
 
-        for (const tab of tabs) {
-            if (!tab.id || !tab.url || tab.url.startsWith('chrome://')) continue;
+        // Step 2: Scan ONLY the active tab for fresh data
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
+        if (activeTab?.id && activeTab.url && isRelevantUrl(activeTab.url)) {
             try {
                 const results = await chrome.scripting.executeScript({
-                    target: { tabId: tab.id },
+                    target: { tabId: activeTab.id },
                     func: extractNamesFromPage,
                 });
 
                 if (results?.[0]?.result) {
-                    // Enhance with tab info (favicon)
-                    const extracted = results[0].result as ExtractedName[];
-                    extracted.forEach((item) => {
-                        item.favicon = tab.favIconUrl || '';
-                        // If no subtitle from extraction, use tab title
+                    const fresh = results[0].result as ExtractedName[];
+                    fresh.forEach(item => {
+                        item.favicon = activeTab.favIconUrl || '';
                         if (!item.subtitle) {
-                            item.subtitle = tab.title || '';
+                            item.subtitle = activeTab.title || '';
                         }
                     });
-                    allNames.push(...extracted);
+
+                    // Save to cache
+                    if (fresh.length > 0) {
+                        await saveToCachedNames(fresh, activeTab.id, activeTab.favIconUrl || '');
+                    }
+
+                    // Merge fresh + cached, prioritizing fresh
+                    const merged = new Map<string, ExtractedName>();
+                    for (const item of cached) {
+                        merged.set(item.name.toLowerCase(), item);
+                    }
+                    for (const item of fresh) {
+                        merged.set(item.name.toLowerCase(), item);
+                    }
+
+                    return Array.from(merged.values())
+                        .sort((a, b) => b.confidence - a.confidence)
+                        .slice(0, 5);
                 }
             } catch {
-                // Tab may not allow script injection
+                // Fall through to return cached
             }
         }
 
-        // Deduplicate and sort by confidence
-        const seen = new Map<string, ExtractedName>();
-        for (const item of allNames) {
-            const key = item.name.toLowerCase();
-            const existing = seen.get(key);
-            if (!existing || item.confidence > existing.confidence) {
-                seen.set(key, item);
-            }
-        }
-
-        return Array.from(seen.values())
+        // Return cached names sorted by confidence
+        return cached
             .sort((a, b) => b.confidence - a.confidence)
             .slice(0, 5);
     } catch {
         return [];
     }
 }
+
 
 // Function to be injected into tabs
 function extractNamesFromPage(): ExtractedName[] {
