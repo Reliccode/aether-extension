@@ -283,11 +283,11 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
     await chrome.storage.local.set({ [NAMES_CACHE_KEY]: filtered });
 });
 
-// Optimized: Read from cache first, only scan active tab as fallback
+// Optimized: Read from cache first, scan active tab, fallback to full scan if cache empty
 async function scanTabsForNames(): Promise<ExtractedName[]> {
     try {
         // Step 1: Get cached names (instant)
-        const cached = await getCachedNames();
+        let cached = await getCachedNames();
 
         // Step 2: Scan ONLY the active tab for fresh data
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -327,8 +327,38 @@ async function scanTabsForNames(): Promise<ExtractedName[]> {
                         .slice(0, 5);
                 }
             } catch {
-                // Fall through to return cached
+                // Fall through to check cache
             }
+        }
+
+        // Step 3: If cache is empty, do a one-time full scan of relevant tabs
+        if (cached.length === 0) {
+            const allTabs = await chrome.tabs.query({});
+            for (const tab of allTabs) {
+                if (!tab.id || !tab.url || !isRelevantUrl(tab.url)) continue;
+
+                try {
+                    const results = await chrome.scripting.executeScript({
+                        target: { tabId: tab.id },
+                        func: extractNamesFromPage,
+                    });
+
+                    if (results?.[0]?.result) {
+                        const extracted = results[0].result as ExtractedName[];
+                        if (extracted.length > 0) {
+                            extracted.forEach(item => {
+                                item.favicon = tab.favIconUrl || '';
+                                if (!item.subtitle) item.subtitle = tab.title || '';
+                            });
+                            await saveToCachedNames(extracted, tab.id, tab.favIconUrl || '');
+                        }
+                    }
+                } catch {
+                    // Continue to next tab
+                }
+            }
+            // Reload cache after full scan
+            cached = await getCachedNames();
         }
 
         // Return cached names sorted by confidence
