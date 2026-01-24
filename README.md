@@ -2,6 +2,8 @@
 
 A Chrome extension for instant text template insertion with fuzzy search.
 
+[![CI](https://github.com/Reliccode/aether-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/Reliccode/aether-extension/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/tag/Reliccode/aether-extension?label=release)](https://github.com/Reliccode/aether-extension/releases)
 ![Aether](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
 ![Chrome](https://img.shields.io/badge/Platform-Chrome%20Extension-blue)
 ![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue)
