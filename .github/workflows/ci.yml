@@ -17,7 +17,9 @@ jobs:
         with:
           node-version: 20
           cache: 'pnpm'
-      - run: corepack enable
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 8.15.4
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
@@ -31,7 +33,9 @@ jobs:
         with:
           node-version: 20
           cache: 'pnpm'
-      - run: corepack enable
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 8.15.4
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm package
@@ -51,6 +55,9 @@ jobs:
         with:
           node-version: 20
           cache: 'pnpm'
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 8.15.4
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
@@ -58,7 +65,6 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: |
             playwright-${{ runner.os }}-
-      - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm e2e:build
