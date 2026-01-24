@@ -2,6 +2,8 @@
 
 A Chrome extension for instant text template insertion with fuzzy search.
 
+[![CI](https://github.com/Reliccode/aether-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/Reliccode/aether-extension/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/tag/Reliccode/aether-extension?label=release)](https://github.com/Reliccode/aether-extension/releases)
 ![Aether](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
 ![Chrome](https://img.shields.io/badge/Platform-Chrome%20Extension-blue)
 ![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue)
@@ -32,18 +34,21 @@ A Chrome extension for instant text template insertion with fuzzy search.
 
 ## 🚀 Quick Start
 
-### Development
+### Development (monorepo)
 
 ```bash
-# Install dependencies
-npm install
+# Install dependencies (uses pnpm workspaces)
+pnpm install
 
-# Start dev server with HMR
-npm run dev
+# Start dev server with HMR (extension)
+pnpm --filter @aether/extension dev
 
 # Build for production
-npm run build
+pnpm --filter @aether/extension build
 ```
+
+See `docs/testing.md` for lint/unit/E2E commands and CI label rules.
+To seed the local knowledge cache quickly during dev: `pnpm --filter @aether/extension dev:load-pack`.
 
 ### Load in Chrome
 
@@ -52,22 +57,19 @@ npm run build
 3. Click "Load unpacked"
 4. Select the `dist/` folder
 
-## 📁 Project Structure
+## 📁 Project Structure (monorepo)
 
 ```
-src/
-├── background/         # Service worker
-│   ├── index.ts       # Message handling, search
-│   └── db.ts          # IndexedDB operations
-├── content/           # Content script
-│   ├── index.tsx      # Main injection logic
-│   ├── adapters/      # Input field adapters
-│   └── ui/            # SuggestionList component
-├── options/           # Dashboard page
-│   ├── App.tsx        # Template management UI
-│   └── main.tsx       # Entry point
-└── common/
-    └── types.ts       # Shared TypeScript types
+apps/
+  extension/          # Aether Edge (Chrome extension)
+    src/
+      background/
+      content/        # overlay, slash menu, adapters
+      options/
+    tests/            # unit + e2e (Playwright)
+packages/
+  (reserved for shared libs: core, contracts, ui-kit)
+docs/                 # testing guide, etc.
 ```
 
 ## 🛠️ Tech Stack

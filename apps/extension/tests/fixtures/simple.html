@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Aether Fixture</title>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; }
+    textarea, input { width: 100%; max-width: 480px; padding: 0.5rem; font-size: 16px; }
+    .block { margin-bottom: 1.5rem; }
+    [contenteditable] { min-height: 80px; border: 1px solid #ccc; padding: 0.5rem; max-width: 480px; }
+  </style>
+</head>
+<body>
+  <h1>Aether Test Fixture</h1>
+  <div class="block">
+    <label for="fixture-input">Input</label><br />
+    <input id="fixture-input" name="fixture-input" placeholder="Type /ref here" />
+  </div>
+  <div class="block">
+    <label for="fixture-textarea">Textarea</label><br />
+    <textarea id="fixture-textarea" name="fixture-textarea" placeholder="Type /ref here"></textarea>
+  </div>
+  <div class="block">
+    <label>Contenteditable</label><br />
+    <div id="fixture-ce" contenteditable="true" aria-label="contenteditable">Type /ref here</div>
+  </div>
+</body>
+</html>
