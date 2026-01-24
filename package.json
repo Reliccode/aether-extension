@@ -10,7 +10,10 @@
     "build": "pnpm --filter @aether/extension build",
     "e2e": "pnpm --filter @aether/extension e2e",
     "e2e:build": "pnpm --filter @aether/extension e2e:build",
-    "package": "pnpm --filter @aether/extension package"
+    "package": "pnpm --filter @aether/extension package",
+    "changeset": "changeset",
+    "changeset:version": "changeset version",
+    "changeset:publish": "changeset publish"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.8"
