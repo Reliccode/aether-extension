@@ -72,5 +72,5 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm --filter @aether/extension exec playwright install --with-deps chromium
       - run: pnpm e2e:build
