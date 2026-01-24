@@ -1,0 +1,57 @@
+{
+  "name": "@aether/extension",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "VITE_CONFIG_CACHE=./.vite-cache vite",
+    "build": "VITE_CONFIG_CACHE=./.vite-cache tsc -b tsconfig.app.json tsconfig.node.json && VITE_CONFIG_CACHE=./.vite-cache vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "VITE_CONFIG_CACHE=./.vite-cache vitest run",
+    "dev:load-pack": "node scripts/load-pack.js",
+    "package": "zip -r dist/aether-extension.zip dist",
+    "e2e": "playwright test",
+    "e2e:build": "pnpm run build && playwright test"
+  },
+  "dependencies": {
+    "@aether/contracts": "workspace:*",
+    "@aether/core": "workspace:*",
+    "@crxjs/vite-plugin": "^2.0.0-beta.33",
+    "clsx": "^2.1.1",
+    "fuse.js": "^7.1.0",
+    "idb": "^8.0.3",
+    "lucide-react": "^0.562.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwind-merge": "^3.4.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.45.0",
+    "@tailwindcss/postcss": "^4.1.18",
+    "@types/chrome": "^0.1.33",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "autoprefixer": "^10.4.23",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "fake-indexeddb": "^6.2.5",
+    "globals": "^16.5.0",
+    "happy-dom": "^20.3.7",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vite": "^7.2.4",
+    "vitest": "^2.1.4"
+  },
+  "overrides": {
+    "esbuild": "^0.27.2",
+    "happy-dom": "^20.3.7"
+  }
+}
