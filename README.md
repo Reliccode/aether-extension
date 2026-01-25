@@ -49,6 +49,7 @@ pnpm --filter @aether/extension build
 
 See `docs/testing.md` for lint/unit/E2E commands and CI label rules.
 To seed the local knowledge cache quickly during dev: `pnpm --filter @aether/extension dev:load-pack`.
+To mock-sync from a Notion-style export: `pnpm --filter @aether/extension dev:pull-notion` (uses `apps/extension/scripts/notion-sample.json` by default).
 
 ### Load in Chrome
 

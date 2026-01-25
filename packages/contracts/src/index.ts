@@ -23,7 +23,7 @@ export type SearchResult = Snippet & { score?: number };
 
 export type KnowledgeField =
     | { type: 'text'; value: string }
-    | { type: 'secret'; value: string; revealPolicy?: 'mask' | 'plain' }
+    | { type: 'secret'; value: string; revealPolicy?: 'mask' | 'plain'; auditOnReveal?: boolean }
     | { type: 'link'; value: { label: string; url: string } };
 
 export interface KnowledgeRecord {
@@ -34,4 +34,24 @@ export interface KnowledgeRecord {
     updatedAt: string;
     sourceRef?: { kind: 'notion' | 'sfdc' | 'other'; url: string; lastEdited?: string };
     title?: string;
+}
+
+export interface KnowledgePack {
+    source: 'notion' | 'sfdc' | 'other';
+    syncedAt: string;
+    records: KnowledgeRecord[];
+    meta?: Record<string, unknown>;
+}
+
+export interface NotionFieldMapping {
+    notionProperty: string;
+    fieldKey: string;
+    type: 'text' | 'secret' | 'link';
+}
+
+export interface NotionConnectorConfig {
+    databaseId: string;
+    url?: string;
+    mappings: NotionFieldMapping[];
+    keyProperties: string[];
 }

@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import { replaceAllRecords } from '../src/content/knowledgeDb.js';
 import { knowledgeSeed } from '../src/common/knowledgeSeed.js';
 
