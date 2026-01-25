@@ -1,0 +1,32 @@
+{
+  "results": [
+    {
+      "id": "apt-sds46",
+      "last_edited_time": "2024-12-01T00:00:00.000Z",
+      "url": "https://notion.so/example/apartment-sds46",
+      "properties": {
+        "Name": { "title": [{ "plain_text": "Simon-Dach-Str 46 (Berlin)" }] },
+        "Address": { "rich_text": [{ "plain_text": "Simon Dach 46 Berlin" }] },
+        "Alias": { "rich_text": [{ "plain_text": "SDS46" }] },
+        "Keybox Code": { "rich_text": [{ "plain_text": "7391" }] },
+        "WiFi Name": { "rich_text": [{ "plain_text": "SDS-Guest" }] },
+        "WiFi Password": { "rich_text": [{ "plain_text": "stay-cozy" }] },
+        "Parking": { "rich_text": [{ "plain_text": "Parking spot #12 behind building; gate code 5555" }] }
+      }
+    },
+    {
+      "id": "apt-nyc-wb12",
+      "last_edited_time": "2024-11-20T00:00:00.000Z",
+      "url": "https://notion.so/example/wb12",
+      "properties": {
+        "Name": { "title": [{ "plain_text": "West Broadway 12 (NYC)" }] },
+        "Address": { "rich_text": [{ "plain_text": "West Broadway 12" }] },
+        "Alias": { "rich_text": [{ "plain_text": "WB12" }] },
+        "Keybox Code": { "rich_text": [{ "plain_text": "0042" }] },
+        "WiFi Name": { "rich_text": [{ "plain_text": "WB12-Loft" }] },
+        "WiFi Password": { "rich_text": [{ "plain_text": "broadway-fast" }] },
+        "Parking": { "rich_text": [{ "plain_text": "Paid garage across street; validate ticket at front desk" }] }
+      }
+    }
+  ]
+}

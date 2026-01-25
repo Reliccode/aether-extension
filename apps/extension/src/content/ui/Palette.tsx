@@ -3,12 +3,14 @@ import type { KnowledgeField, KnowledgeRecord } from '@aether/contracts';
 import clsx from 'clsx';
 import { renderFieldValue, shouldMask } from './paletteUtils';
 import type { ContextInfo } from '../context';
+import { getLastReveal, logReveal } from '../auditLog';
 
 interface Props {
     records: KnowledgeRecord[];
     onClose: () => void;
     contextKey?: string;
     contextReason?: string;
+    onPinContext?: (record: KnowledgeRecord) => void;
 }
 
 function readWindowContext(): Pick<ContextInfo, 'key' | 'reason'> | undefined {
@@ -21,10 +23,11 @@ function readWindowContext(): Pick<ContextInfo, 'key' | 'reason'> | undefined {
     return undefined;
 }
 
-export function Palette({ records, onClose, contextKey, contextReason }: Props) {
+export function Palette({ records, onClose, contextKey, contextReason, onPinContext }: Props) {
     const [query, setQuery] = useState('');
     const [highlight, setHighlight] = useState(0);
     const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+    const [lastReveals, setLastReveals] = useState<Record<string, string>>({});
     const fallbackCtx = readWindowContext();
     const effectiveContextKey = contextKey || fallbackCtx?.key;
     const effectiveContextReason = contextReason || fallbackCtx?.reason;
@@ -63,9 +66,17 @@ export function Palette({ records, onClose, contextKey, contextReason }: Props) 
         }
     };
 
-    const toggleReveal = (field: KnowledgeField) => {
+    const toggleReveal = async (fieldKey: string, field: KnowledgeField) => {
         if (field.type !== 'secret') return;
-        setRevealed(prev => ({ ...prev, [field.value]: !prev[field.value] }));
+        const next = !revealed[field.value];
+        setRevealed(prev => ({ ...prev, [field.value]: next }));
+        if (next && field.auditOnReveal && activeRecord) {
+            await logReveal(activeRecord.recordId, fieldKey).catch(() => {});
+            setLastReveals(prev => ({
+                ...prev,
+                [`${activeRecord.recordId}:${fieldKey}`]: new Date().toISOString(),
+            }));
+        }
     };
 
     useEffect(() => {
@@ -98,6 +109,28 @@ export function Palette({ records, onClose, contextKey, contextReason }: Props) 
         window.addEventListener('keydown', handler, { capture: true });
         return () => window.removeEventListener('keydown', handler, { capture: true });
     }, [highlight, onClose, results, revealed]);
+
+    useEffect(() => {
+        let cancelled = false;
+        async function loadReveals() {
+            if (!activeRecord) return;
+            const updates: Record<string, string> = {};
+            for (const key of Object.keys(activeRecord.fields)) {
+                const field = activeRecord.fields[key];
+                if (field.type === 'secret') {
+                    const ts = await getLastReveal(activeRecord.recordId, key);
+                    if (ts) updates[`${activeRecord.recordId}:${key}`] = ts;
+                }
+            }
+            if (!cancelled && Object.keys(updates).length) {
+                setLastReveals(prev => ({ ...prev, ...updates }));
+            }
+        }
+        loadReveals().catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [activeRecord]);
 
     return (
         <div className="aether-palette shadow-2xl" role="dialog" aria-modal="true" style={{ pointerEvents: 'auto' }}>
@@ -141,9 +174,21 @@ export function Palette({ records, onClose, contextKey, contextReason }: Props) 
                             <div className="aether-palette__detail-title">{activeRecord.title || activeRecord.keys[0]}</div>
                             <div className="aether-palette__detail-actions">
                                 <button className="aether-chip" onClick={() => copyAllFields(activeRecord)}>Copy all</button>
+                                {onPinContext && (
+                                    <button
+                                        className="aether-chip"
+                                        onClick={() => onPinContext(activeRecord)}
+                                        aria-label="Pin this record as context"
+                                    >
+                                        Set as context
+                                    </button>
+                                )}
                             </div>
                             <div className="aether-palette__fields">
-                                {Object.entries(activeRecord.fields).map(([key, field]) => (
+                                {Object.entries(activeRecord.fields).map(([key, field]) => {
+                                    const lastKey = `${activeRecord.recordId}:${key}`;
+                                    const last = lastReveals[lastKey];
+                                    return (
                                     <div key={key} className="aether-field">
                                         <div className="aether-field__label">
                                             <span>{key}</span>
@@ -152,11 +197,14 @@ export function Palette({ records, onClose, contextKey, contextReason }: Props) 
                                         <div className="aether-field__value">
                                             {renderFieldValue(field, !shouldMask(field, field.type === 'secret' ? revealed[field.value] ?? false : false))}
                                         </div>
+                                        {field.type === 'secret' && last && (
+                                            <div className="aether-field__meta">Last revealed {new Date(last).toLocaleString()}</div>
+                                        )}
                                         <div className="aether-field__actions">
                                             {field.type === 'secret' && (
                                                 <button
                                                     className="aether-chip"
-                                                    onClick={() => toggleReveal(field)}
+                                                    onClick={() => void toggleReveal(key, field)}
                                                 >
                                                     {revealed[field.value] ? 'Hide' : 'Reveal'}
                                                 </button>
@@ -164,7 +212,8 @@ export function Palette({ records, onClose, contextKey, contextReason }: Props) 
                                             <button className="aether-chip" onClick={() => copyField(field)}>Copy</button>
                                         </div>
                                     </div>
-                                ))}
+                                );
+                                })}
                             </div>
                         </>
                     )}

@@ -130,15 +130,6 @@ test.describe('Aether overlay', () => {
     const page = await context.newPage();
     await page.goto(fixtureUrlWithContext);
 
-    // Force context for this test to avoid timing flakiness
-    await page.evaluate(() => {
-      (window as Window & { __aetherCtx?: unknown }).__aetherCtx = {
-        key: 'wb12',
-        confidence: 'high',
-        reason: 'test-forced',
-      };
-    });
-
     // Type slash trigger and ensure the expected record still shows (prefiltered)
     const input = page.locator('#fixture-input');
     await input.click();

@@ -9,7 +9,7 @@ import { PlaceholderForm } from './ui/PlaceholderForm';
 import { parseTemplate, fillTemplate, hasPlaceholders } from '@aether/core';
 import { Palette } from './ui/Palette';
 import { knowledgeStore } from './knowledgeStore';
-import { detectContext, subscribeContext } from './context';
+import { detectContext, setPinnedContext, subscribeContext } from './context';
 
 import css from './content.css?inline';
 
@@ -359,6 +359,7 @@ function showPalette() {
             contextKey={paletteContext.key}
             contextReason={paletteContext.reason}
             onClose={hidePalette}
+            onPinContext={rec => setPinnedContext(rec.keys[0] || rec.recordId)}
         />
     );
     // force a microtask re-render to pick up late context if any
@@ -371,6 +372,7 @@ function showPalette() {
                 contextKey={detectContext().key}
                 contextReason={detectContext().reason}
                 onClose={hidePalette}
+                onPinContext={rec => setPinnedContext(rec.keys[0] || rec.recordId)}
             />
         );
     });

@@ -17,10 +17,12 @@ const CONDUIT_HOST_SNIPPETS = ['conduit.ai', 'app.conduit.ai'];
 // listeners
 type Listener = (info: ContextInfo) => void;
 const listeners = new Set<Listener>();
+let pinned: ContextInfo | null = null;
 let current: ContextInfo = detectNow();
 window.__aetherCtx = current;
 
 function detectNow(): ContextInfo {
+  if (pinned) return pinned;
   const { hostname, pathname, search } = window.location;
   const hostMatch = CONDUIT_HOST_SNIPPETS.some(snippet => hostname.includes(snippet));
 
@@ -105,6 +107,16 @@ function detectConduit(): ContextInfo | null {
 
 export function detectContext(): ContextInfo {
   return current;
+}
+
+export function setPinnedContext(key: string, reason = 'pinned by agent') {
+  pinned = { key, confidence: 'high', reason };
+  notify(pinned);
+}
+
+export function clearPinnedContext() {
+  pinned = null;
+  notify(detectNow());
 }
 
 export function subscribeContext(listener: Listener): () => void {

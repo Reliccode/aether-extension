@@ -2,11 +2,13 @@ import { useEffect, useState, useRef } from 'react';
 import type { Snippet, LanguageCode } from '@aether/contracts';
 import { Plus, Search, Save, Trash2, Tag, Sparkles, Globe, Download, Upload } from 'lucide-react';
 import clsx from 'clsx';
+import { loadAllRecords } from '../content/knowledgeDb';
 
 export default function App() {
     const [snippets, setSnippets] = useState<Snippet[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+    const [knowledgeSummary, setKnowledgeSummary] = useState<{ count: number; latest?: string }>({ count: 0 });
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Form State
@@ -35,6 +37,20 @@ export default function App() {
     };
 
     useEffect(() => { refreshData(); }, []);
+    useEffect(() => {
+        (async () => {
+            try {
+                const records = await loadAllRecords();
+                const latest = records.reduce<string | undefined>((acc, rec) => {
+                    if (!acc || new Date(rec.updatedAt) > new Date(acc)) return rec.updatedAt;
+                    return acc;
+                }, undefined);
+                setKnowledgeSummary({ count: records.length, latest });
+            } catch {
+                setKnowledgeSummary({ count: 0, latest: undefined });
+            }
+        })();
+    }, []);
 
     // Handle Selection
     useEffect(() => {
@@ -248,6 +264,16 @@ export default function App() {
                                 </div>
                             </div>
                         ))
+                    )}
+                </div>
+
+                <div className="p-4 border-t border-slate-200 bg-white">
+                    <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Knowledge Packs</div>
+                    <div className="text-sm text-slate-700">Records: {knowledgeSummary.count}</div>
+                    {knowledgeSummary.latest ? (
+                        <div className="text-xs text-slate-500 mt-1">Last synced {new Date(knowledgeSummary.latest).toLocaleString()}</div>
+                    ) : (
+                        <div className="text-xs text-slate-500 mt-1">No sync yet</div>
                     )}
                 </div>
 

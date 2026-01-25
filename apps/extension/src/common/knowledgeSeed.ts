@@ -7,9 +7,9 @@ export const knowledgeSeed: KnowledgeRecord[] = [
         title: 'Simon-Dach-Str 46 (Berlin)',
         keys: ['simon dach 46', 'sds46', 'berlin apt', 'listing-2345'],
         fields: {
-            keybox_code: { type: 'secret', value: '7391', revealPolicy: 'mask' },
+            keybox_code: { type: 'secret', value: '7391', revealPolicy: 'mask', auditOnReveal: true },
             wifi_name: { type: 'text', value: 'SDS-Guest' },
-            wifi_password: { type: 'secret', value: 'stay-cozy', revealPolicy: 'mask' },
+            wifi_password: { type: 'secret', value: 'stay-cozy', revealPolicy: 'mask', auditOnReveal: true },
             parking: { type: 'text', value: 'Parking spot #12 behind building; gate code 5555' },
         },
         updatedAt: '2024-12-01T00:00:00Z',
@@ -21,9 +21,9 @@ export const knowledgeSeed: KnowledgeRecord[] = [
         title: 'West Broadway 12 (NYC)',
         keys: ['west broadway 12', 'wb12', 'nyc loft'],
         fields: {
-            keybox_code: { type: 'secret', value: '0042', revealPolicy: 'mask' },
+            keybox_code: { type: 'secret', value: '0042', revealPolicy: 'mask', auditOnReveal: true },
             wifi_name: { type: 'text', value: 'WB12-Loft' },
-            wifi_password: { type: 'secret', value: 'broadway-fast', revealPolicy: 'mask' },
+            wifi_password: { type: 'secret', value: 'broadway-fast', revealPolicy: 'mask', auditOnReveal: true },
             parking: { type: 'text', value: 'Paid garage across street; validate ticket at front desk' },
         },
         updatedAt: '2024-11-20T00:00:00Z',
