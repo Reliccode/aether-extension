@@ -1,5 +1,5 @@
 import { knowledgeSeed } from '../common/knowledgeSeed';
-import type { KnowledgeRecord } from '@aether/contracts';
+import type { KnowledgeRecord, ResolvedContext } from '@aether/contracts';
 import Fuse from 'fuse.js';
 import { loadAllRecords, replaceAllRecords } from './knowledgeDb';
 
@@ -56,6 +56,28 @@ class KnowledgeStore {
     findByKey(key: string): KnowledgeRecord[] {
         const needle = key.toLowerCase();
         return this.records.filter(r => r.keys.some(k => k.toLowerCase().includes(needle)));
+    }
+
+    resolveContext(ctx: ResolvedContext | null): KnowledgeRecord[] {
+        if (!ctx) return [];
+        if (ctx.bookingId) {
+            const exact = this.records.filter(r =>
+                r.keys.some(k => k.toLowerCase() === ctx.bookingId!.toLowerCase())
+            );
+            if (exact.length) return exact;
+        }
+        const candidates = ctx.apartmentKeyCandidates || [];
+        const collected: KnowledgeRecord[] = [];
+        for (const cand of candidates) {
+            const matches = this.fuse.search(cand).map(r => r.item);
+            for (const m of matches) {
+                if (!collected.find(r => r.recordId === m.recordId)) {
+                    collected.push(m);
+                }
+            }
+            if (collected.length >= 3) break;
+        }
+        return collected;
     }
 
     getAll(): KnowledgeRecord[] {

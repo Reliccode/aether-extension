@@ -55,3 +55,13 @@ export interface NotionConnectorConfig {
     mappings: NotionFieldMapping[];
     keyProperties: string[];
 }
+
+export type ContextConfidence = 'high' | 'medium' | 'low' | 'none';
+
+export interface ResolvedContext {
+    app: string;
+    bookingId?: string;
+    apartmentKeyCandidates: string[];
+    confidence: ContextConfidence;
+    evidence: string[];
+}

@@ -339,12 +339,7 @@ function hidePalette() {
 
 function showPalette() {
     // refresh context right before render in case listeners haven't fired yet
-    const paramsKey = new URLSearchParams(window.location.search).get('bookingId')?.toLowerCase();
-    if (!currentContext.key && paramsKey) {
-        currentContext = { key: paramsKey, confidence: 'medium', reason: 'matched query param (late)' };
-    } else {
-        currentContext = detectContext();
-    }
+    currentContext = detectContext();
     paletteContext = currentContext;
 
     const container = getOrCreatePaletteHost();

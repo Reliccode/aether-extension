@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import type { KnowledgeField, KnowledgeRecord } from '@aether/contracts';
 import clsx from 'clsx';
 import { renderFieldValue, shouldMask } from './paletteUtils';
-import type { ContextInfo } from '../context';
 import { getLastReveal, logReveal } from '../auditLog';
 
 interface Props {
@@ -13,9 +12,9 @@ interface Props {
     onPinContext?: (record: KnowledgeRecord) => void;
 }
 
-function readWindowContext(): Pick<ContextInfo, 'key' | 'reason'> | undefined {
+function readWindowContext(): { key?: string; reason?: string } | undefined {
     try {
-        const ctx = (window as Window & { __aetherCtx?: ContextInfo }).__aetherCtx;
+        const ctx = (window as Window & { __aetherCtx?: { key?: string; reason?: string } }).__aetherCtx;
         if (ctx?.key) return { key: ctx.key, reason: ctx.reason };
     } catch {
         // ignore
