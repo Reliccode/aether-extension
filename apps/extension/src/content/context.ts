@@ -14,20 +14,27 @@ type Listener = (info: ResolvedContext & { key?: string; reason?: string }) => v
 
 const listeners = new Set<Listener>();
 let pinned: ResolvedContext | null = null;
-let current = detectNow();
-window.__aetherCtx = current;
 let resolverConfigs: ResolverConfig[] = [];
+let current: (ResolvedContext & { key?: string; reason?: string });
+current = detectNow();
+window.__aetherCtx = current;
 
 // preload resolver configs from storage (best effort)
 if (typeof chrome !== 'undefined' && chrome.storage?.local) {
     chrome.storage.local.get(['resolverConfig'], res => {
-        if (res?.resolverConfig?.configs) {
-            resolverConfigs = res.resolverConfig.configs as ResolverConfig[];
+        const cfg = res?.resolverConfig as { configs?: ResolverConfig[] } | undefined;
+        if (cfg?.configs) {
+            resolverConfigs = cfg.configs;
+            notify(detectNow());
         }
     });
     chrome.storage.onChanged.addListener((changes, area) => {
-        if (area === 'local' && changes.resolverConfig?.newValue?.configs) {
-            resolverConfigs = changes.resolverConfig.newValue.configs as ResolverConfig[];
+        if (area === 'local' && changes.resolverConfig?.newValue) {
+            const val = changes.resolverConfig.newValue as { configs?: ResolverConfig[] };
+            if (val?.configs) {
+                resolverConfigs = val.configs;
+                notify(detectNow());
+            }
         }
     });
 }

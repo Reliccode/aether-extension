@@ -11,9 +11,8 @@ export default function App() {
     const [knowledgeSummary, setKnowledgeSummary] = useState<{ count: number; latest?: string }>({ count: 0 });
     const [captureStatus, setCaptureStatus] = useState<'idle' | 'waiting' | 'received'>('idle');
     const [captureResult, setCaptureResult] = useState<{ selector: string; sampleText: string } | null>(null);
-    const [resolverStrategies, setResolverStrategies] = useState<ResolverStrategyConfig[]>([]);
-    const [resolverApp, setResolverApp] = useState('conduit');
-    const [resolverHosts, setResolverHosts] = useState<string>('conduit.ai,app.conduit.ai');
+    const [resolverConfigs, setResolverConfigs] = useState<ResolverConfig[]>([]);
+    const [activeConfigIndex, setActiveConfigIndex] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Form State
@@ -71,10 +70,12 @@ export default function App() {
     useEffect(() => {
         chrome.storage.local.get(['resolverConfig'], res => {
             const cfg = res?.resolverConfig as { configs?: ResolverConfig[] } | undefined;
-            if (cfg?.configs?.[0]) {
-                setResolverStrategies(cfg.configs[0].strategies || []);
-                setResolverApp(cfg.configs[0].app || 'conduit');
-                setResolverHosts((cfg.configs[0].hosts || []).join(',') || '');
+            if (cfg?.configs?.length) {
+                setResolverConfigs(cfg.configs);
+                setActiveConfigIndex(0);
+            } else {
+                setResolverConfigs([{ app: 'conduit', hosts: ['conduit.ai', 'app.conduit.ai'], strategies: [] }]);
+                setActiveConfigIndex(0);
             }
         });
     }, []);
@@ -97,25 +98,54 @@ export default function App() {
             transform: 'trimLower',
             confidence: 'medium'
         };
-        setResolverStrategies(prev => [...prev, newStrat]);
+        setResolverConfigs(prev => {
+            const next = [...prev];
+            const cfg = { ...next[activeConfigIndex] };
+            cfg.strategies = [...(cfg.strategies || []), newStrat];
+            next[activeConfigIndex] = cfg;
+            return next;
+        });
         setCaptureResult(null);
         setCaptureStatus('idle');
     };
 
     const updateStrategy = (idx: number, patch: Partial<ResolverStrategyConfig>) => {
-        setResolverStrategies(prev => prev.map((s, i) => i === idx ? { ...s, ...patch } : s));
+        setResolverConfigs(prev => {
+            const next = [...prev];
+            const cfg = { ...next[activeConfigIndex] };
+            cfg.strategies = cfg.strategies.map((s, i) => i === idx ? { ...s, ...patch } : s);
+            next[activeConfigIndex] = cfg;
+            return next;
+        });
     };
 
     const saveResolverConfig = async () => {
         const doc: { configs: ResolverConfig[]; updatedAt: string } = {
-            configs: [{
-                app: resolverApp || 'conduit',
-                hosts: resolverHosts.split(',').map(h => h.trim()).filter(Boolean),
-                strategies: resolverStrategies
-            }],
+            configs: resolverConfigs,
             updatedAt: new Date().toISOString()
         };
         await chrome.storage.local.set({ resolverConfig: doc });
+    };
+
+    const addConfig = () => {
+        setResolverConfigs(prev => [...prev, { app: 'new-app', hosts: [], strategies: [] }]);
+        setActiveConfigIndex(resolverConfigs.length);
+    };
+
+    const deleteConfig = (idx: number) => {
+        setResolverConfigs(prev => {
+            const next = prev.filter((_, i) => i !== idx);
+            return next.length ? next : [{ app: 'conduit', hosts: [], strategies: [] }];
+        });
+        setActiveConfigIndex(0);
+    };
+
+    const updateActiveConfig = (patch: Partial<ResolverConfig>) => {
+        setResolverConfigs(prev => {
+            const next = [...prev];
+            next[activeConfigIndex] = { ...next[activeConfigIndex], ...patch };
+            return next;
+        });
     };
 
     // Handle Selection
@@ -365,17 +395,37 @@ export default function App() {
                     )}
                     <div className="mt-3 border-t border-slate-200 pt-3">
                         <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Resolver Config</div>
+                        <div className="flex gap-2 mb-2">
+                            <select
+                                className="text-xs border border-slate-200 rounded px-2 py-1 flex-1"
+                                value={activeConfigIndex}
+                                onChange={e => setActiveConfigIndex(Number(e.target.value))}
+                            >
+                                {resolverConfigs.map((c, idx) => (
+                                    <option key={idx} value={idx}>{c.app} ({(c.hosts || []).join(',') || 'hosts?'})</option>
+                                ))}
+                            </select>
+                            <button
+                                onClick={addConfig}
+                                className="text-xs px-2 py-1 border border-slate-200 rounded bg-white hover:bg-slate-50"
+                            >New</button>
+                            <button
+                                onClick={() => deleteConfig(activeConfigIndex)}
+                                className="text-xs px-2 py-1 border border-red-200 rounded bg-white text-red-600 hover:bg-red-50"
+                                disabled={resolverConfigs.length <= 1}
+                            >Del</button>
+                        </div>
                         <input
                             className="w-full text-xs border border-slate-200 rounded px-2 py-1 mb-2"
                             placeholder="App name (e.g., conduit)"
-                            value={resolverApp}
-                            onChange={e => setResolverApp(e.target.value)}
+                            value={resolverConfigs[activeConfigIndex]?.app || ''}
+                            onChange={e => updateActiveConfig({ app: e.target.value })}
                         />
                         <input
                             className="w-full text-xs border border-slate-200 rounded px-2 py-1 mb-2"
                             placeholder="Hosts (comma separated)"
-                            value={resolverHosts}
-                            onChange={e => setResolverHosts(e.target.value)}
+                            value={(resolverConfigs[activeConfigIndex]?.hosts || []).join(',')}
+                            onChange={e => updateActiveConfig({ hosts: e.target.value.split(',').map(h => h.trim()).filter(Boolean) })}
                         />
                         <button
                             onClick={saveResolverConfig}
@@ -524,11 +574,11 @@ export default function App() {
                                 <MousePointerClick size={16} className="text-amber-600" />
                                 <div className="text-sm font-semibold text-slate-800">Resolver Strategies</div>
                             </div>
-                            {resolverStrategies.length === 0 && (
+                            {resolverConfigs[activeConfigIndex]?.strategies.length === 0 && (
                                 <p className="text-xs text-slate-500">Capture an element to start building a resolver.</p>
                             )}
                             <div className="space-y-3">
-                                {resolverStrategies.map((s, idx) => (
+                                {(resolverConfigs[activeConfigIndex]?.strategies || []).map((s, idx) => (
                                     <div key={idx} className="border border-slate-200 rounded p-2 bg-slate-50">
                                         <div className="flex gap-2 items-center mb-2">
                                             <select
