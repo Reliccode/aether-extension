@@ -10,6 +10,7 @@ import { parseTemplate, fillTemplate, hasPlaceholders } from '@aether/core';
 import { Palette } from './ui/Palette';
 import { knowledgeStore } from './knowledgeStore';
 import { detectContext, setPinnedContext, subscribeContext } from './context';
+import { startCaptureMode, stopCaptureMode } from './capture';
 
 import css from './content.css?inline';
 
@@ -26,6 +27,25 @@ let lastPaletteRenderKey = 0;
 
 const POPUP_HEIGHT = 400;
 const POPUP_WIDTH = 400;
+
+// message handlers
+if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+        if (message?.type === 'START_CAPTURE_MODE') {
+            startCaptureMode(result => {
+                chrome.runtime.sendMessage({ type: 'CAPTURE_RESULT', payload: result });
+            });
+            sendResponse(true);
+            return true;
+        }
+        if (message?.type === 'STOP_CAPTURE_MODE') {
+            stopCaptureMode();
+            sendResponse(true);
+            return true;
+        }
+        return false;
+    });
+}
 
 function getOrCreateOverlay() {
     if (currentOverlay && currentHost && document.body.contains(currentHost)) {

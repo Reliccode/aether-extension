@@ -1,4 +1,4 @@
-import type { ResolvedContext, ContextConfidence } from '@aether/contracts';
+import type { ResolvedContext, ContextConfidence, ResolverConfig } from '@aether/contracts';
 
 declare global {
     interface Window {
@@ -16,6 +16,21 @@ const listeners = new Set<Listener>();
 let pinned: ResolvedContext | null = null;
 let current = detectNow();
 window.__aetherCtx = current;
+let resolverConfigs: ResolverConfig[] = [];
+
+// preload resolver configs from storage (best effort)
+if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    chrome.storage.local.get(['resolverConfig'], res => {
+        if (res?.resolverConfig?.configs) {
+            resolverConfigs = res.resolverConfig.configs as ResolverConfig[];
+        }
+    });
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local' && changes.resolverConfig?.newValue?.configs) {
+            resolverConfigs = changes.resolverConfig.newValue.configs as ResolverConfig[];
+        }
+    });
+}
 
 function confidenceFrom(ctx: StrategyResult): ContextConfidence {
     if (ctx.bookingId) return 'high';
@@ -40,6 +55,76 @@ function runStrategies(strategies: Strategy[]): StrategyResult {
         if (result.evidence?.length) acc.evidence = [...(acc.evidence || []), ...result.evidence];
     }
     return acc;
+}
+
+function applyTransforms(raw: string, transform?: string): string {
+    const v = raw ?? '';
+    switch (transform) {
+        case 'digits':
+            return v.replace(/\D+/g, '');
+        case 'normalizeAddress':
+            return v.trim().toLowerCase().replace(/\s+/g, ' ');
+        case 'trimLower':
+            return v.trim().toLowerCase();
+        default:
+            return v.trim();
+    }
+}
+
+function strategyFromConfig(cfg: ResolverConfig): Strategy[] {
+    return cfg.strategies.map(strat => () => {
+        if (strat.type === 'urlParam') {
+            const params = new URLSearchParams(window.location.search);
+            const val = params.get(strat.selector || '');
+            if (!val) return null;
+            return {
+                [strat.field]: strat.field === 'bookingId' ? applyTransforms(val, strat.transform) : [applyTransforms(val, strat.transform)],
+                evidence: [`urlParam:${strat.selector}`],
+                confidence: strat.confidence
+            };
+        }
+        if (strat.type === 'attribute') {
+            const el = strat.selector ? document.querySelector(strat.selector) : null;
+            const val = el?.getAttribute(strat.attribute || '');
+            if (!val) return null;
+            const processed = applyTransforms(val, strat.transform);
+            return {
+                [strat.field]: strat.field === 'bookingId' ? processed : [processed],
+                evidence: [`attr:${strat.selector} ${strat.attribute}`],
+                confidence: strat.confidence
+            };
+        }
+        if (strat.type === 'selectorText') {
+            const el = strat.selector ? document.querySelector(strat.selector) : null;
+            const text = el?.textContent?.trim();
+            if (!text) return null;
+            const processed = applyTransforms(text, strat.transform);
+            return {
+                [strat.field]: strat.field === 'bookingId' ? processed : [processed],
+                evidence: [`selectorText:${strat.selector}`],
+                confidence: strat.confidence
+            };
+        }
+        if (strat.type === 'labelRegex') {
+            const regex = strat.regex ? new RegExp(strat.regex) : null;
+            if (!regex) return null;
+            const textNodes = Array.from(document.querySelectorAll('body *'))
+                .map(el => el.textContent || '')
+                .filter(t => t.includes(strat.label || ''));
+            for (const t of textNodes) {
+                const m = t.match(regex);
+                if (m && m[1]) {
+                    const processed = applyTransforms(m[1], strat.transform);
+                    return {
+                        [strat.field]: strat.field === 'bookingId' ? processed : [processed],
+                        evidence: [`labelRegex:${strat.label}`],
+                        confidence: strat.confidence
+                    };
+                }
+            }
+        }
+        return null;
+    });
 }
 
 function conduitStrategies(): Strategy[] {
@@ -99,6 +184,13 @@ function detectNow(): ResolvedContext & { key?: string; reason?: string } {
 
     const { hostname } = window.location;
     const strategies: Strategy[] = [];
+
+    // config-driven strategies first (app match)
+    const cfg = resolverConfigs.find(c => hostname.includes(c.app));
+    if (cfg) {
+        strategies.push(...strategyFromConfig(cfg));
+    }
+
     if (CONDUIT_HOST_SNIPPETS.some(snippet => hostname.includes(snippet))) {
         strategies.push(...conduitStrategies());
     } else {

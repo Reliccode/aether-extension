@@ -65,3 +65,33 @@ export interface ResolvedContext {
     confidence: ContextConfidence;
     evidence: string[];
 }
+
+export type TransformKind = 'trimLower' | 'digits' | 'normalizeAddress' | 'raw';
+
+export interface ResolverStrategyConfig {
+    type: 'selectorText' | 'attribute' | 'labelRegex' | 'urlParam';
+    selector?: string;        // for selectorText / attribute
+    attribute?: string;       // for attribute
+    label?: string;           // for labelRegex
+    regex?: string;           // capture group 1 used
+    field: 'bookingId' | 'apartmentKeyCandidates';
+    transform?: TransformKind;
+    confidence?: ContextConfidence;
+}
+
+export interface ResolverConfig {
+    app: string;
+    strategies: ResolverStrategyConfig[];
+    confidenceRules?: { requires: ('bookingId' | 'apartmentKeyCandidates')[]; confidence: ContextConfidence }[];
+}
+
+export interface CaptureResult {
+    selector: string;
+    sampleText: string;
+    attribute?: string;
+}
+
+export interface ResolverConfigDocument {
+    configs: ResolverConfig[];
+    updatedAt: string;
+}

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
-import type { Snippet, LanguageCode } from '@aether/contracts';
-import { Plus, Search, Save, Trash2, Tag, Sparkles, Globe, Download, Upload } from 'lucide-react';
+import type { Snippet, LanguageCode, ResolverConfig, ResolverStrategyConfig } from '@aether/contracts';
+import { Plus, Search, Save, Trash2, Tag, Sparkles, Globe, Download, Upload, MousePointerClick } from 'lucide-react';
 import clsx from 'clsx';
 import { loadAllRecords } from '../content/knowledgeDb';
 
@@ -9,6 +9,9 @@ export default function App() {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [knowledgeSummary, setKnowledgeSummary] = useState<{ count: number; latest?: string }>({ count: 0 });
+    const [captureStatus, setCaptureStatus] = useState<'idle' | 'waiting' | 'received'>('idle');
+    const [captureResult, setCaptureResult] = useState<{ selector: string; sampleText: string } | null>(null);
+    const [resolverStrategies, setResolverStrategies] = useState<ResolverStrategyConfig[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Form State
@@ -51,6 +54,59 @@ export default function App() {
             }
         })();
     }, []);
+
+    useEffect(() => {
+        const listener = (msg: { type?: string; payload?: { selector: string; sampleText: string } }) => {
+            if (msg?.type === 'CAPTURE_RESULT' && msg.payload) {
+                setCaptureStatus('received');
+                setCaptureResult(msg.payload);
+            }
+        };
+        chrome.runtime.onMessage.addListener(listener);
+        return () => chrome.runtime.onMessage.removeListener(listener);
+    }, []);
+
+    useEffect(() => {
+        chrome.storage.local.get(['resolverConfig'], res => {
+            const cfg = res?.resolverConfig as { configs?: ResolverConfig[] } | undefined;
+            if (cfg?.configs?.[0]?.strategies) setResolverStrategies(cfg.configs[0].strategies);
+        });
+    }, []);
+
+    const startCapture = async () => {
+        setCaptureStatus('waiting');
+        setCaptureResult(null);
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab?.id) {
+            await chrome.tabs.sendMessage(tab.id, { type: 'START_CAPTURE_MODE' });
+        }
+    };
+
+    const addStrategyFromCapture = () => {
+        if (!captureResult) return;
+        const newStrat: ResolverStrategyConfig = {
+            type: 'selectorText',
+            selector: captureResult.selector,
+            field: 'apartmentKeyCandidates',
+            transform: 'trimLower',
+            confidence: 'medium'
+        };
+        setResolverStrategies(prev => [...prev, newStrat]);
+        setCaptureResult(null);
+        setCaptureStatus('idle');
+    };
+
+    const updateStrategy = (idx: number, patch: Partial<ResolverStrategyConfig>) => {
+        setResolverStrategies(prev => prev.map((s, i) => i === idx ? { ...s, ...patch } : s));
+    };
+
+    const saveResolverConfig = async () => {
+        const doc: { configs: ResolverConfig[]; updatedAt: string } = {
+            configs: [{ app: 'conduit', strategies: resolverStrategies }],
+            updatedAt: new Date().toISOString()
+        };
+        await chrome.storage.local.set({ resolverConfig: doc });
+    };
 
     // Handle Selection
     useEffect(() => {
@@ -223,6 +279,28 @@ export default function App() {
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
+
+                    <div className="mt-3">
+                        <button
+                            onClick={startCapture}
+                            className="w-full bg-white border border-amber-200 hover:border-amber-400 text-amber-700 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+                        >
+                            <MousePointerClick size={16} /> Capture Mode
+                        </button>
+                        <div className="text-[11px] text-slate-500 mt-1">
+                            {captureStatus === 'waiting' && 'Click a field in the target app…'}
+                            {captureStatus === 'received' && captureResult && (
+                                <span>Captured selector {captureResult.selector}</span>
+                            )}
+                            {captureStatus === 'idle' && 'Pick element to build resolver config'}
+                        </div>
+                        {captureResult && (
+                            <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+                                <div><strong>Selector:</strong> {captureResult.selector}</div>
+                                <div className="line-clamp-2"><strong>Sample:</strong> {captureResult.sampleText || '(no text)'}</div>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-2 space-y-1">
@@ -275,6 +353,15 @@ export default function App() {
                     ) : (
                         <div className="text-xs text-slate-500 mt-1">No sync yet</div>
                     )}
+                    <div className="mt-3 border-t border-slate-200 pt-3">
+                        <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Resolver Config</div>
+                        <button
+                            onClick={saveResolverConfig}
+                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg text-sm font-medium transition-all shadow-sm cursor-pointer"
+                        >
+                            Save Resolver Config
+                        </button>
+                    </div>
                 </div>
 
                 {/* Export/Import Footer */}
@@ -409,11 +496,100 @@ export default function App() {
                         </div>
                     </>
                 ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-slate-300">
-                        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                            <Search size={32} />
+                    <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 p-6 bg-slate-50">
+                        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+                            <div className="flex items-center gap-2 mb-2">
+                                <MousePointerClick size={16} className="text-amber-600" />
+                                <div className="text-sm font-semibold text-slate-800">Resolver Strategies</div>
+                            </div>
+                            {resolverStrategies.length === 0 && (
+                                <p className="text-xs text-slate-500">Capture an element to start building a resolver.</p>
+                            )}
+                            <div className="space-y-3">
+                                {resolverStrategies.map((s, idx) => (
+                                    <div key={idx} className="border border-slate-200 rounded p-2 bg-slate-50">
+                                        <div className="flex gap-2 items-center mb-2">
+                                            <select
+                                                className="text-xs border border-slate-200 rounded px-2 py-1"
+                                                value={s.field}
+                                                onChange={e => updateStrategy(idx, { field: e.target.value as ResolverStrategyConfig['field'] })}
+                                            >
+                                                <option value="bookingId">bookingId</option>
+                                                <option value="apartmentKeyCandidates">apartmentKeyCandidates</option>
+                                            </select>
+                                            <select
+                                                className="text-xs border border-slate-200 rounded px-2 py-1"
+                                                value={s.type}
+                                                onChange={e => updateStrategy(idx, { type: e.target.value as ResolverStrategyConfig['type'] })}
+                                            >
+                                                <option value="selectorText">selectorText</option>
+                                                <option value="attribute">attribute</option>
+                                                <option value="urlParam">urlParam</option>
+                                                <option value="labelRegex">labelRegex</option>
+                                            </select>
+                                            <select
+                                                className="text-xs border border-slate-200 rounded px-2 py-1"
+                                                value={s.transform || 'raw'}
+                                                onChange={e => updateStrategy(idx, { transform: e.target.value as ResolverStrategyConfig['transform'] })}
+                                            >
+                                                <option value="raw">raw</option>
+                                                <option value="trimLower">trimLower</option>
+                                                <option value="digits">digits</option>
+                                                <option value="normalizeAddress">normalizeAddress</option>
+                                            </select>
+                                        </div>
+                                        {['selectorText', 'attribute', 'labelRegex'].includes(s.type) && (
+                                            <input
+                                                className="w-full text-xs border border-slate-200 rounded px-2 py-1 mb-1"
+                                                placeholder="Selector (e.g., [data-booking-id])"
+                                                value={s.selector || ''}
+                                                onChange={e => updateStrategy(idx, { selector: e.target.value })}
+                                            />
+                                        )}
+                                        {s.type === 'attribute' && (
+                                            <input
+                                                className="w-full text-xs border border-slate-200 rounded px-2 py-1 mb-1"
+                                                placeholder="Attribute (e.g., data-booking-id)"
+                                                value={s.attribute || ''}
+                                                onChange={e => updateStrategy(idx, { attribute: e.target.value })}
+                                            />
+                                        )}
+                                        {s.type === 'urlParam' && (
+                                            <input
+                                                className="w-full text-xs border border-slate-200 rounded px-2 py-1 mb-1"
+                                                placeholder="Param name (e.g., bookingId)"
+                                                value={s.selector || ''}
+                                                onChange={e => updateStrategy(idx, { selector: e.target.value })}
+                                            />
+                                        )}
+                                        {s.type === 'labelRegex' && (
+                                            <input
+                                                className="w-full text-xs border border-slate-200 rounded px-2 py-1 mb-1"
+                                                placeholder="Regex with capture group"
+                                                value={s.regex || ''}
+                                                onChange={e => updateStrategy(idx, { regex: e.target.value })}
+                                            />
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                            {captureResult && (
+                                <button
+                                    onClick={addStrategyFromCapture}
+                                    className="mt-3 w-full bg-amber-500 hover:bg-amber-600 text-white py-2 rounded text-sm font-medium"
+                                >
+                                    Add captured selector
+                                </button>
+                            )}
                         </div>
-                        <p className="text-sm font-medium text-slate-400">Select a template or create a new one</p>
+                        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm flex flex-col items-center justify-center text-slate-400">
+                            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                                <Search size={32} />
+                            </div>
+                            <p className="text-sm font-medium text-slate-500 text-center px-4">
+                                Select a template or build resolver strategies from captured elements.
+                            </p>
+                        </div>
                     </div>
                 )}
             </div>
