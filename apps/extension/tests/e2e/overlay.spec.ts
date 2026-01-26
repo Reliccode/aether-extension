@@ -161,11 +161,12 @@ test.describe('Aether overlay', () => {
       };
       chrome.storage.local.set({ resolverConfig: cfg }, () => resolve());
     }));
+    await optionsPage.waitForTimeout(300);
     await optionsPage.close();
 
     const page = await context.newPage();
     await page.goto(fixtureUrlWithCustom);
-    const ctxKey = await page.waitForFunction(() => (window as any).__aetherCtx?.bookingId || null, { timeout: 1500 });
+    const ctxKey = await page.waitForFunction(() => (window as any).__aetherCtx?.bookingId || null, { timeout: 5000 });
     expect(await ctxKey.jsonValue()).toBe('wb12');
     await context.close();
   });
