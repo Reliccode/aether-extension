@@ -16,18 +16,19 @@ const listeners = new Set<Listener>();
 let pinned: ResolvedContext | null = null;
 let resolverConfigs: ResolverConfig[] = [];
 let current: (ResolvedContext & { key?: string; reason?: string });
-current = detectNow();
-window.__aetherCtx = current;
 
 // preload resolver configs from storage (best effort)
+async function loadConfigs() {
+    if (typeof chrome === 'undefined' || !chrome.storage?.local) return;
+    const res = await new Promise<{ resolverConfig?: { configs?: ResolverConfig[] } }>(resolve =>
+        chrome.storage.local.get(['resolverConfig'], items => resolve(items as any))
+    );
+    if (res?.resolverConfig?.configs) {
+        resolverConfigs = res.resolverConfig.configs;
+    }
+}
+
 if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-    chrome.storage.local.get(['resolverConfig'], res => {
-        const cfg = res?.resolverConfig as { configs?: ResolverConfig[] } | undefined;
-        if (cfg?.configs) {
-            resolverConfigs = cfg.configs;
-            notify(detectNow());
-        }
-    });
     chrome.storage.onChanged.addListener((changes, area) => {
         if (area === 'local' && changes.resolverConfig?.newValue) {
             const val = changes.resolverConfig.newValue as { configs?: ResolverConfig[] };
@@ -303,4 +304,8 @@ function startObservers() {
     mo.observe(document.body, { childList: true, subtree: true, attributes: true });
 }
 
-startObservers();
+void loadConfigs().then(() => {
+    current = detectNow();
+    window.__aetherCtx = current;
+    startObservers();
+});
