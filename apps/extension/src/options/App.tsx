@@ -12,6 +12,8 @@ export default function App() {
     const [captureStatus, setCaptureStatus] = useState<'idle' | 'waiting' | 'received'>('idle');
     const [captureResult, setCaptureResult] = useState<{ selector: string; sampleText: string } | null>(null);
     const [resolverStrategies, setResolverStrategies] = useState<ResolverStrategyConfig[]>([]);
+    const [resolverApp, setResolverApp] = useState('conduit');
+    const [resolverHosts, setResolverHosts] = useState<string>('conduit.ai,app.conduit.ai');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Form State
@@ -69,7 +71,11 @@ export default function App() {
     useEffect(() => {
         chrome.storage.local.get(['resolverConfig'], res => {
             const cfg = res?.resolverConfig as { configs?: ResolverConfig[] } | undefined;
-            if (cfg?.configs?.[0]?.strategies) setResolverStrategies(cfg.configs[0].strategies);
+            if (cfg?.configs?.[0]) {
+                setResolverStrategies(cfg.configs[0].strategies || []);
+                setResolverApp(cfg.configs[0].app || 'conduit');
+                setResolverHosts((cfg.configs[0].hosts || []).join(',') || '');
+            }
         });
     }, []);
 
@@ -102,7 +108,11 @@ export default function App() {
 
     const saveResolverConfig = async () => {
         const doc: { configs: ResolverConfig[]; updatedAt: string } = {
-            configs: [{ app: 'conduit', strategies: resolverStrategies }],
+            configs: [{
+                app: resolverApp || 'conduit',
+                hosts: resolverHosts.split(',').map(h => h.trim()).filter(Boolean),
+                strategies: resolverStrategies
+            }],
             updatedAt: new Date().toISOString()
         };
         await chrome.storage.local.set({ resolverConfig: doc });
@@ -355,6 +365,18 @@ export default function App() {
                     )}
                     <div className="mt-3 border-t border-slate-200 pt-3">
                         <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Resolver Config</div>
+                        <input
+                            className="w-full text-xs border border-slate-200 rounded px-2 py-1 mb-2"
+                            placeholder="App name (e.g., conduit)"
+                            value={resolverApp}
+                            onChange={e => setResolverApp(e.target.value)}
+                        />
+                        <input
+                            className="w-full text-xs border border-slate-200 rounded px-2 py-1 mb-2"
+                            placeholder="Hosts (comma separated)"
+                            value={resolverHosts}
+                            onChange={e => setResolverHosts(e.target.value)}
+                        />
                         <button
                             onClick={saveResolverConfig}
                             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg text-sm font-medium transition-all shadow-sm cursor-pointer"

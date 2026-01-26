@@ -81,6 +81,7 @@ export interface ResolverStrategyConfig {
 
 export interface ResolverConfig {
     app: string;
+    hosts?: string[];
     strategies: ResolverStrategyConfig[];
     confidenceRules?: { requires: ('bookingId' | 'apartmentKeyCandidates')[]; confidence: ContextConfidence }[];
 }

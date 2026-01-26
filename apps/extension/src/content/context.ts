@@ -127,6 +127,17 @@ function strategyFromConfig(cfg: ResolverConfig): Strategy[] {
     });
 }
 
+function pickConfig(hostname: string): ResolverConfig | undefined {
+    // prefer host match
+    const hostMatch = resolverConfigs.find(c => c.hosts?.some(h => hostname.includes(h)));
+    if (hostMatch) return hostMatch;
+    // fallback by app name snippet
+    const appMatch = resolverConfigs.find(c => hostname.includes(c.app));
+    if (appMatch) return appMatch;
+    // fallback first
+    return resolverConfigs[0];
+}
+
 function conduitStrategies(): Strategy[] {
     return [
         () => {
@@ -186,7 +197,7 @@ function detectNow(): ResolvedContext & { key?: string; reason?: string } {
     const strategies: Strategy[] = [];
 
     // config-driven strategies first (app match)
-    const cfg = resolverConfigs.find(c => hostname.includes(c.app));
+    const cfg = pickConfig(hostname);
     if (cfg) {
         strategies.push(...strategyFromConfig(cfg));
     }
@@ -199,9 +210,19 @@ function detectNow(): ResolvedContext & { key?: string; reason?: string } {
     }
 
     const aggregate = runStrategies(strategies);
-    const confidence = confidenceFrom(aggregate);
+    let confidence = confidenceFrom(aggregate);
+    if (cfg?.confidenceRules) {
+        for (const rule of cfg.confidenceRules) {
+            const okBooking = rule.requires.includes('bookingId') ? Boolean(aggregate.bookingId) : true;
+            const okApts = rule.requires.includes('apartmentKeyCandidates') ? (aggregate.apartmentKeyCandidates?.length ?? 0) > 0 : true;
+            if (okBooking && okApts) {
+                confidence = rule.confidence;
+                break;
+            }
+        }
+    }
     const ctx: ResolvedContext = {
-        app: CONDUIT_HOST_SNIPPETS.some(h => hostname.includes(h)) ? 'conduit' : 'unknown',
+        app: cfg?.app || (CONDUIT_HOST_SNIPPETS.some(h => hostname.includes(h)) ? 'conduit' : 'unknown'),
         bookingId: aggregate.bookingId,
         apartmentKeyCandidates: aggregate.apartmentKeyCandidates || [],
         confidence,
