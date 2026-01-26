@@ -10,6 +10,8 @@ interface Props {
     contextKey?: string;
     contextReason?: string;
     onPinContext?: (record: KnowledgeRecord) => void;
+    confidence?: string;
+    evidence?: string[];
 }
 
 function readWindowContext(): { key?: string; reason?: string } | undefined {
@@ -22,7 +24,7 @@ function readWindowContext(): { key?: string; reason?: string } | undefined {
     return undefined;
 }
 
-export function Palette({ records, onClose, contextKey, contextReason, onPinContext }: Props) {
+export function Palette({ records, onClose, contextKey, contextReason, onPinContext, confidence, evidence }: Props) {
     const [query, setQuery] = useState('');
     const [highlight, setHighlight] = useState(0);
     const [revealed, setRevealed] = useState<Record<string, boolean>>({});
@@ -147,7 +149,15 @@ export function Palette({ records, onClose, contextKey, contextReason, onPinCont
                 <div className="aether-palette__context">
                     <span className="aether-pill">Context</span>
                     <span className="aether-context__key">{effectiveContextKey}</span>
+                    {confidence && <span className="aether-pill">{confidence}</span>}
                     {effectiveContextReason && <span className="aether-context__reason">{effectiveContextReason}</span>}
+                </div>
+            )}
+            {evidence && evidence.length > 0 && (
+                <div className="aether-context__evidence">
+                    {evidence.slice(0, 3).map(item => (
+                        <span key={item} className="aether-pill aether-pill--muted">{item}</span>
+                    ))}
                 </div>
             )}
             <div className="aether-palette__grid">

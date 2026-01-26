@@ -373,6 +373,8 @@ function showPalette() {
             records={knowledgeStore.getAll()}
             contextKey={paletteContext.key}
             contextReason={paletteContext.reason}
+            confidence={(paletteContext as any).confidence}
+            evidence={(paletteContext as any).evidence}
             onClose={hidePalette}
             onPinContext={rec => setPinnedContext(rec.keys[0] || rec.recordId)}
         />
