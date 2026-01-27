@@ -20,4 +20,3 @@
 - Fixture server lives at `apps/extension/tests/utils/fixture-server.ts`.
 - E2E seeds snippets via the extension options page; adjust data in `apps/extension/tests/e2e/overlay.spec.ts` if snippets change.
 - To seed the local IndexedDB knowledge cache with the seed pack: `pnpm --filter @aether/extension dev:load-pack`.
-- To mock Notion sync into the cache: `pnpm --filter @aether/extension dev:pull-notion` (reads `apps/extension/scripts/notion-sample.json` unless `NOTION_SAMPLE` is provided).

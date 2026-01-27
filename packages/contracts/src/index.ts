@@ -23,7 +23,7 @@ export type SearchResult = Snippet & { score?: number };
 
 export type KnowledgeField =
     | { type: 'text'; value: string }
-    | { type: 'secret'; value: string; revealPolicy?: 'mask' | 'plain'; auditOnReveal?: boolean }
+    | { type: 'secret'; value: string; revealPolicy?: 'mask' | 'plain' }
     | { type: 'link'; value: { label: string; url: string } };
 
 export interface KnowledgeRecord {
@@ -34,65 +34,4 @@ export interface KnowledgeRecord {
     updatedAt: string;
     sourceRef?: { kind: 'notion' | 'sfdc' | 'other'; url: string; lastEdited?: string };
     title?: string;
-}
-
-export interface KnowledgePack {
-    source: 'notion' | 'sfdc' | 'other';
-    syncedAt: string;
-    records: KnowledgeRecord[];
-    meta?: Record<string, unknown>;
-}
-
-export interface NotionFieldMapping {
-    notionProperty: string;
-    fieldKey: string;
-    type: 'text' | 'secret' | 'link';
-}
-
-export interface NotionConnectorConfig {
-    databaseId: string;
-    url?: string;
-    mappings: NotionFieldMapping[];
-    keyProperties: string[];
-}
-
-export type ContextConfidence = 'high' | 'medium' | 'low' | 'none';
-
-export interface ResolvedContext {
-    app: string;
-    bookingId?: string;
-    apartmentKeyCandidates: string[];
-    confidence: ContextConfidence;
-    evidence: string[];
-}
-
-export type TransformKind = 'trimLower' | 'digits' | 'normalizeAddress' | 'raw';
-
-export interface ResolverStrategyConfig {
-    type: 'selectorText' | 'attribute' | 'labelRegex' | 'urlParam';
-    selector?: string;        // for selectorText / attribute
-    attribute?: string;       // for attribute
-    label?: string;           // for labelRegex
-    regex?: string;           // capture group 1 used
-    field: 'bookingId' | 'apartmentKeyCandidates';
-    transform?: TransformKind;
-    confidence?: ContextConfidence;
-}
-
-export interface ResolverConfig {
-    app: string;
-    hosts?: string[];
-    strategies: ResolverStrategyConfig[];
-    confidenceRules?: { requires: ('bookingId' | 'apartmentKeyCandidates')[]; confidence: ContextConfidence }[];
-}
-
-export interface CaptureResult {
-    selector: string;
-    sampleText: string;
-    attribute?: string;
-}
-
-export interface ResolverConfigDocument {
-    configs: ResolverConfig[];
-    updatedAt: string;
 }

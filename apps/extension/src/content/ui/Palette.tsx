@@ -2,21 +2,18 @@ import { useEffect, useMemo, useState } from 'react';
 import type { KnowledgeField, KnowledgeRecord } from '@aether/contracts';
 import clsx from 'clsx';
 import { renderFieldValue, shouldMask } from './paletteUtils';
-import { getLastReveal, logReveal } from '../auditLog';
+import type { ContextInfo } from '../context';
 
 interface Props {
     records: KnowledgeRecord[];
     onClose: () => void;
     contextKey?: string;
     contextReason?: string;
-    onPinContext?: (record: KnowledgeRecord) => void;
-    confidence?: string;
-    evidence?: string[];
 }
 
-function readWindowContext(): { key?: string; reason?: string } | undefined {
+function readWindowContext(): Pick<ContextInfo, 'key' | 'reason'> | undefined {
     try {
-        const ctx = (window as Window & { __aetherCtx?: { key?: string; reason?: string } }).__aetherCtx;
+        const ctx = (window as Window & { __aetherCtx?: ContextInfo }).__aetherCtx;
         if (ctx?.key) return { key: ctx.key, reason: ctx.reason };
     } catch {
         // ignore
@@ -24,11 +21,10 @@ function readWindowContext(): { key?: string; reason?: string } | undefined {
     return undefined;
 }
 
-export function Palette({ records, onClose, contextKey, contextReason, onPinContext, confidence, evidence }: Props) {
+export function Palette({ records, onClose, contextKey, contextReason }: Props) {
     const [query, setQuery] = useState('');
     const [highlight, setHighlight] = useState(0);
     const [revealed, setRevealed] = useState<Record<string, boolean>>({});
-    const [lastReveals, setLastReveals] = useState<Record<string, string>>({});
     const fallbackCtx = readWindowContext();
     const effectiveContextKey = contextKey || fallbackCtx?.key;
     const effectiveContextReason = contextReason || fallbackCtx?.reason;
@@ -67,17 +63,9 @@ export function Palette({ records, onClose, contextKey, contextReason, onPinCont
         }
     };
 
-    const toggleReveal = async (fieldKey: string, field: KnowledgeField) => {
+    const toggleReveal = (field: KnowledgeField) => {
         if (field.type !== 'secret') return;
-        const next = !revealed[field.value];
-        setRevealed(prev => ({ ...prev, [field.value]: next }));
-        if (next && field.auditOnReveal && activeRecord) {
-            await logReveal(activeRecord.recordId, fieldKey).catch(() => {});
-            setLastReveals(prev => ({
-                ...prev,
-                [`${activeRecord.recordId}:${fieldKey}`]: new Date().toISOString(),
-            }));
-        }
+        setRevealed(prev => ({ ...prev, [field.value]: !prev[field.value] }));
     };
 
     useEffect(() => {
@@ -111,28 +99,6 @@ export function Palette({ records, onClose, contextKey, contextReason, onPinCont
         return () => window.removeEventListener('keydown', handler, { capture: true });
     }, [highlight, onClose, results, revealed]);
 
-    useEffect(() => {
-        let cancelled = false;
-        async function loadReveals() {
-            if (!activeRecord) return;
-            const updates: Record<string, string> = {};
-            for (const key of Object.keys(activeRecord.fields)) {
-                const field = activeRecord.fields[key];
-                if (field.type === 'secret') {
-                    const ts = await getLastReveal(activeRecord.recordId, key);
-                    if (ts) updates[`${activeRecord.recordId}:${key}`] = ts;
-                }
-            }
-            if (!cancelled && Object.keys(updates).length) {
-                setLastReveals(prev => ({ ...prev, ...updates }));
-            }
-        }
-        loadReveals().catch(() => {});
-        return () => {
-            cancelled = true;
-        };
-    }, [activeRecord]);
-
     return (
         <div className="aether-palette shadow-2xl" role="dialog" aria-modal="true" style={{ pointerEvents: 'auto' }}>
             <div className="aether-palette__header">
@@ -149,15 +115,7 @@ export function Palette({ records, onClose, contextKey, contextReason, onPinCont
                 <div className="aether-palette__context">
                     <span className="aether-pill">Context</span>
                     <span className="aether-context__key">{effectiveContextKey}</span>
-                    {confidence && <span className="aether-pill">{confidence}</span>}
                     {effectiveContextReason && <span className="aether-context__reason">{effectiveContextReason}</span>}
-                </div>
-            )}
-            {evidence && evidence.length > 0 && (
-                <div className="aether-context__evidence">
-                    {evidence.slice(0, 3).map(item => (
-                        <span key={item} className="aether-pill aether-pill--muted">{item}</span>
-                    ))}
                 </div>
             )}
             <div className="aether-palette__grid">
@@ -183,21 +141,9 @@ export function Palette({ records, onClose, contextKey, contextReason, onPinCont
                             <div className="aether-palette__detail-title">{activeRecord.title || activeRecord.keys[0]}</div>
                             <div className="aether-palette__detail-actions">
                                 <button className="aether-chip" onClick={() => copyAllFields(activeRecord)}>Copy all</button>
-                                {onPinContext && (
-                                    <button
-                                        className="aether-chip"
-                                        onClick={() => onPinContext(activeRecord)}
-                                        aria-label="Pin this record as context"
-                                    >
-                                        Set as context
-                                    </button>
-                                )}
                             </div>
                             <div className="aether-palette__fields">
-                                {Object.entries(activeRecord.fields).map(([key, field]) => {
-                                    const lastKey = `${activeRecord.recordId}:${key}`;
-                                    const last = lastReveals[lastKey];
-                                    return (
+                                {Object.entries(activeRecord.fields).map(([key, field]) => (
                                     <div key={key} className="aether-field">
                                         <div className="aether-field__label">
                                             <span>{key}</span>
@@ -206,14 +152,11 @@ export function Palette({ records, onClose, contextKey, contextReason, onPinCont
                                         <div className="aether-field__value">
                                             {renderFieldValue(field, !shouldMask(field, field.type === 'secret' ? revealed[field.value] ?? false : false))}
                                         </div>
-                                        {field.type === 'secret' && last && (
-                                            <div className="aether-field__meta">Last revealed {new Date(last).toLocaleString()}</div>
-                                        )}
                                         <div className="aether-field__actions">
                                             {field.type === 'secret' && (
                                                 <button
                                                     className="aether-chip"
-                                                    onClick={() => void toggleReveal(key, field)}
+                                                    onClick={() => toggleReveal(field)}
                                                 >
                                                     {revealed[field.value] ? 'Hide' : 'Reveal'}
                                                 </button>
@@ -221,8 +164,7 @@ export function Palette({ records, onClose, contextKey, contextReason, onPinCont
                                             <button className="aether-chip" onClick={() => copyField(field)}>Copy</button>
                                         </div>
                                     </div>
-                                );
-                                })}
+                                ))}
                             </div>
                         </>
                     )}

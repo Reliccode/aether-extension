@@ -1,5 +1,15 @@
 # @aether/extension
 
+## 1.0.0
+
+### Features
+- **Command Palette**: Press `Cmd+K` (Mac) or `Ctrl+K` (Windows) to open the template palette on any webpage
+- **Template Library**: Create, edit, and manage message templates with multi-language support
+- **Smart Context Detection**: Automatically detects booking IDs and guest information from Conduit and other platforms
+- **Knowledge Packs**: Import knowledge records for context-aware template suggestions
+- **Import/Export**: Easily backup and restore your templates as JSON files
+- **Name Detection**: Extracts contact names from WhatsApp, Gmail, and other websites
+
 ## 0.1.0
 
 ### Minor Changes

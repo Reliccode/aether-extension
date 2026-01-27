@@ -9,8 +9,7 @@ import { PlaceholderForm } from './ui/PlaceholderForm';
 import { parseTemplate, fillTemplate, hasPlaceholders } from '@aether/core';
 import { Palette } from './ui/Palette';
 import { knowledgeStore } from './knowledgeStore';
-import { detectContext, setPinnedContext, subscribeContext } from './context';
-import { startCaptureMode, stopCaptureMode } from './capture';
+import { detectContext, subscribeContext } from './context';
 
 import css from './content.css?inline';
 
@@ -27,25 +26,6 @@ let lastPaletteRenderKey = 0;
 
 const POPUP_HEIGHT = 400;
 const POPUP_WIDTH = 400;
-
-// message handlers
-if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
-    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-        if (message?.type === 'START_CAPTURE_MODE') {
-            startCaptureMode(result => {
-                chrome.runtime.sendMessage({ type: 'CAPTURE_RESULT', payload: result });
-            });
-            sendResponse(true);
-            return true;
-        }
-        if (message?.type === 'STOP_CAPTURE_MODE') {
-            stopCaptureMode();
-            sendResponse(true);
-            return true;
-        }
-        return false;
-    });
-}
 
 function getOrCreateOverlay() {
     if (currentOverlay && currentHost && document.body.contains(currentHost)) {
@@ -359,7 +339,12 @@ function hidePalette() {
 
 function showPalette() {
     // refresh context right before render in case listeners haven't fired yet
-    currentContext = detectContext();
+    const paramsKey = new URLSearchParams(window.location.search).get('bookingId')?.toLowerCase();
+    if (!currentContext.key && paramsKey) {
+        currentContext = { key: paramsKey, confidence: 'medium', reason: 'matched query param (late)' };
+    } else {
+        currentContext = detectContext();
+    }
     paletteContext = currentContext;
 
     const container = getOrCreatePaletteHost();
@@ -373,10 +358,7 @@ function showPalette() {
             records={knowledgeStore.getAll()}
             contextKey={paletteContext.key}
             contextReason={paletteContext.reason}
-            confidence={(paletteContext as any).confidence}
-            evidence={(paletteContext as any).evidence}
             onClose={hidePalette}
-            onPinContext={rec => setPinnedContext(rec.keys[0] || rec.recordId)}
         />
     );
     // force a microtask re-render to pick up late context if any
@@ -389,7 +371,6 @@ function showPalette() {
                 contextKey={detectContext().key}
                 contextReason={detectContext().reason}
                 onClose={hidePalette}
-                onPinContext={rec => setPinnedContext(rec.keys[0] || rec.recordId)}
             />
         );
     });

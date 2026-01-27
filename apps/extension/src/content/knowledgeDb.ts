@@ -1,18 +1,14 @@
 import { openDB, type IDBPDatabase } from 'idb';
 import type { KnowledgeRecord } from '@aether/contracts';
 
-export const DB_NAME = 'aether-knowledge';
+const DB_NAME = 'aether-knowledge';
 const STORE = 'records';
-const AUDIT_STORE = 'audit';
 
 async function getDb(): Promise<IDBPDatabase> {
-  return openDB(DB_NAME, 2, {
-    upgrade(db, oldVersion) {
+  return openDB(DB_NAME, 1, {
+    upgrade(db) {
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE, { keyPath: 'recordId' });
-      }
-      if (oldVersion < 2 && !db.objectStoreNames.contains(AUDIT_STORE)) {
-        db.createObjectStore(AUDIT_STORE, { keyPath: 'id' });
       }
     },
   });
@@ -36,35 +32,4 @@ export async function replaceAllRecords(records: KnowledgeRecord[]): Promise<voi
     await store.put(rec);
   }
   await tx.done;
-}
-
-export interface AuditEvent {
-  id: string;
-  recordId: string;
-  fieldKey: string;
-  timestamp: string;
-  action: 'reveal';
-}
-
-export async function recordAuditEvent(event: AuditEvent): Promise<void> {
-  const db = await getDb();
-  const tx = db.transaction(AUDIT_STORE, 'readwrite');
-  await tx.store.put(event);
-  await tx.done;
-}
-
-export async function loadAuditLatest(): Promise<Record<string, string>> {
-  const db = await getDb();
-  if (!db.objectStoreNames.contains(AUDIT_STORE)) return {};
-  const tx = db.transaction(AUDIT_STORE, 'readonly');
-  const all = await tx.store.getAll();
-  await tx.done;
-  const latest: Record<string, string> = {};
-  for (const ev of all as AuditEvent[]) {
-    const key = `${ev.recordId}:${ev.fieldKey}`;
-    if (!latest[key] || latest[key] < ev.timestamp) {
-      latest[key] = ev.timestamp;
-    }
-  }
-  return latest;
 }
