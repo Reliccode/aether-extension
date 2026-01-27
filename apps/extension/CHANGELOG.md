@@ -1,6 +1,6 @@
 # @aether/extension
 
-## 1.0.0
+## 0.2.0
 
 ### Features
 - **Command Palette**: Press `Cmd+K` (Mac) or `Ctrl+K` (Windows) to open the template palette on any webpage
